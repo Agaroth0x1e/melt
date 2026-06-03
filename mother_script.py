@@ -404,7 +404,9 @@ class MotherScript:
                     self.cli.show_error(f"{entry.get('title', entry.get('url', '?'))}: {e}")
                     self.fail_count += 1
                 done += 1
-                sys.stderr.write(f'\rCompleted: {done}/{total}  ')
+                elapsed = time.time() - start_time
+                m, s = divmod(int(elapsed), 60)
+                sys.stderr.write(f'\rCompleted: {done}/{total}  Elapsed: {m}m{s:02d}s  ')
                 sys.stderr.flush()
             if not self._interrupted:
                 print()
