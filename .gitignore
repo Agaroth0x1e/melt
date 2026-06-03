@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+dist/
+build/
+*.spec
+
+# Caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.hypothesis/
+
+# Environment
+.env
+.venv
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp / runtime
+temp/
+downloads/
+archive/
+log/
+failed/
+_resume_queue.json
+
+# Build artifacts
+bin/windows/melt.exe
+bin/linux/melt
+bin/macos/melt
+bin/host/melt
+bin/host/melt.exe
+# Sounds are tracked (small files, essential)
+
+# Generated
+icon_preview.png

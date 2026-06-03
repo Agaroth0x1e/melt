@@ -1,0 +1,182 @@
+import sys
+import time as time_module
+
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
+from rich.prompt import Prompt, IntPrompt
+from rich.align import Align
+from rich import box
+
+console = Console()
+
+
+def timed_prompt(prompt_text, timeout, default):
+    console.print(prompt_text, end="")
+    sys.stdout.flush()
+
+    _any_key = False
+    start = time_module.time()
+    while time_module.time() - start < timeout:
+        if sys.platform == 'win32':
+            import msvcrt
+            if msvcrt.kbhit():
+                _any_key = True
+                break
+        else:
+            import select
+            if select.select([sys.stdin], [], [], 0)[0]:
+                _any_key = True
+                break
+        time_module.sleep(0.05)
+
+    if not _any_key:
+        console.print()
+        return default
+
+    console.print()
+    line = sys.stdin.readline().strip()
+    return line if line else default
+
+
+class CLI:
+    def __init__(self, config):
+        self.config = config
+        self.console = console
+
+    def show_banner(self):
+        banner = Text("""
+    +=====================================================+
+    |              MelT - YouTube Downloader              |
+    |                Modern Python CLI v1.0               |
+    +=====================================================+
+""", style="bold cyan")
+        self.console.print(Align.center(banner))
+        self.console.print()
+
+    def ask_url(self):
+        return Prompt.ask("[bold yellow]Enter YouTube URL[/]").strip()
+
+    def ask_format(self):
+        timeout = self.config['general']['timeout_seconds']
+        default = self.config['general']['default_format']
+        mapping = {'1': 'video', '2': 'audio'}
+        result = timed_prompt(
+            f"[bold yellow]Download format[/] (1: video, 2: audio) [bold](default: {default})[/]: ",
+            timeout, '1' if default == 'video' else '2'
+        )
+        return mapping.get(result.strip(), default)
+
+    def ask_playlist_range(self, total, identifier=None):
+        timeout = self.config['general']['timeout_seconds']
+        label = f" for \"{identifier}\"" if identifier else ""
+        result = timed_prompt(
+            f"[bold yellow]Playlist range{label}[/] (e.g. 1-5, 1,3,5 or 'all') [bold](default: all)[/]: ",
+            timeout, 'all'
+        )
+        return result if result else 'all'
+
+    def ask_duplicate_action(self):
+        timeout = self.config['general']['timeout_seconds']
+        result = timed_prompt(
+            "[bold yellow]On duplicate[/] (keep/overwrite/skip) [bold](default: skip)[/]: ",
+            timeout, 'skip'
+        )
+        if result.lower().strip() in ('keep', 'overwrite', 'skip'):
+            return result.lower().strip()
+        return 'skip'
+
+    def ask_destination(self):
+        timeout = self.config['general']['timeout_seconds']
+        default = self.config['general']['downloads_dir']
+        result = timed_prompt(
+            f"[bold yellow]Destination folder[/] [bold](default: {default})[/]: ",
+            timeout, default
+        )
+        return result if result else default
+
+    def show_options_summary(self, options):
+        table = Table(box=box.ROUNDED, title="[bold]Current Configuration[/]", title_justify="center")
+        table.add_column("Option", style="cyan", width=20)
+        table.add_column("Value", style="green")
+
+        for key, value in options.items():
+            table.add_row(key, str(value))
+
+        self.console.print(table)
+        self.console.print()
+
+    def show_start_prompt(self, timeout):
+        result = timed_prompt(
+            f"[bold yellow]Press Enter to start[/] (auto-starts in {timeout}s) [bold]or type 'm' to modify options, Ctrl+C to abort[/]: ",
+            timeout, 'start'
+        )
+        return result
+
+    def ask_modify_option(self, options):
+        self.console.print("[bold cyan]Select option to modify:[/]")
+        keys = list(options.keys())
+        for i, key in enumerate(keys, 1):
+            self.console.print(f"  [{i}] {key}")
+        self.console.print(f"  [{len(keys)+1}] Start download")
+
+        choice = IntPrompt.ask("[bold yellow]Your choice[/]", default=len(keys)+1)
+        if 1 <= choice <= len(keys):
+            return keys[choice-1]
+        return None
+
+    def show_processing_item(self, item_name, current, total):
+        self.console.print(f"[cyan][{current}/{total}][/] Processing: [bold]{item_name}[/]")
+
+    def show_success(self, message):
+        self.console.print(f"[green]OK[/] {message}")
+
+    def show_error(self, message):
+        self.console.print(f"[red]FAIL[/] {message}")
+
+    def show_warning(self, message):
+        self.console.print(f"[yellow]WARN[/] {message}")
+
+    def show_info(self, message):
+        self.console.print(f"[blue]INFO[/] {message}")
+
+    def show_completion(self, success_count, fail_count, dest, log_path, failed_path, sub_fail_count=0, elapsed=0):
+        self.console.print()
+        elapsed_str = ""
+        if elapsed:
+            mins, secs = divmod(int(elapsed), 60)
+            hrs, mins = divmod(mins, 60)
+            if hrs:
+                elapsed_str = f"[bold]Time elapsed:[/] {hrs}h {mins}m {secs}s"
+            elif mins:
+                elapsed_str = f"[bold]Time elapsed:[/] {mins}m {secs}s"
+            else:
+                elapsed_str = f"[bold]Time elapsed:[/] {secs}s"
+        body = (
+            f"[green]Successfully processed: {success_count}[/]\n"
+            f"[red]Failed: {fail_count}[/]"
+        )
+        if sub_fail_count > 0:
+            body += f"\n[yellow]Subtitle failures: {sub_fail_count} (videos still downloaded)[/]"
+        body += f"\n[bold]Delivered to:[/] {dest}"
+        if elapsed_str:
+            body += f"\n{elapsed_str}"
+        if fail_count > 0 or sub_fail_count > 0:
+            body += (
+                f"\n\n[yellow]Some operations had issues.[/]\n"
+                f"Check [bold]{log_path}[/] for details\n"
+                f"Check [bold]{failed_path}[/] for failure records"
+            )
+        panel = Panel(
+            body,
+            title="[bold]Done[/]",
+            box=box.DOUBLE_EDGE
+        )
+        self.console.print(panel)
+
+    def ask_continue(self):
+        return Prompt.ask(
+            "[bold yellow]Enter URLs to download more, or type 'exit' to quit[/]",
+            default=""
+        ).strip()

@@ -1,0 +1,323 @@
+import os
+import sys
+import urllib.parse
+import yt_dlp
+
+class YtdlpLogger:
+    def debug(self, msg): pass
+    def info(self, msg): pass
+    def warning(self, msg): pass
+    def error(self, msg): pass
+
+
+class Downloader:
+    def __init__(self, config, logger):
+        self.config = config
+        self.logger = logger
+        self._info_cache = {}
+        self._flat_cache = {}
+
+    def _resolve(self, path):
+        return path if os.path.isabs(path) else self.config.resolve_path(path)
+
+    def _media_extensions(self):
+        return {'.mp4', '.mkv', '.webm', '.m4a', '.mp3', '.mka', '.opus', '.ogg', '.wav', '.aac', '.flac'}
+
+    def _find_media_file(self, directory):
+        candidates = []
+        for f in os.listdir(directory):
+            ext = os.path.splitext(f)[1].lower()
+            if ext in self._media_extensions():
+                candidates.append(os.path.join(directory, f))
+        if candidates:
+            return max(candidates, key=os.path.getmtime)
+        return None
+
+    def _find_subtitle_file(self, directory, lang='en', prefer_human=True):
+        files = sorted(os.listdir(directory), reverse=True)
+        candidates = {'human': [], 'auto': []}
+        for f in files:
+            lower = f.lower()
+            if '.clean.' in lower:
+                continue
+            is_sub = lower.endswith(f'.{lang}.srt') or lower.endswith(f'.{lang}.vtt') \
+                     or lower.endswith('.srt') or lower.endswith('.vtt')
+            if not is_sub:
+                continue
+            if lang in lower and lower.count(lang) == 1:
+                candidates['human'].append(f)
+            else:
+                candidates['auto'].append(f)
+        pick = candidates['human'] if prefer_human and candidates['human'] else candidates['auto']
+        return os.path.join(directory, pick[0]) if pick else None
+
+    def get_video_info(self, url, force=False):
+        if not force and url in self._info_cache:
+            return self._info_cache[url]
+        info_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': False,
+            'skip_download': True,
+        }
+        with yt_dlp.YoutubeDL(info_opts) as ydl:
+            try:
+                info = ydl.extract_info(url, download=False)
+                self._info_cache[url] = info
+                return info
+            except Exception as e:
+                raise RuntimeError(f"Failed to fetch video info: {e}")
+
+    def is_playlist(self, url):
+        if url in self._flat_cache:
+            return bool(self._flat_cache[url].get('entries'))
+        try:
+            flat_opts = {'quiet': True, 'no_warnings': True, 'extract_flat': True, 'skip_download': True}
+            with yt_dlp.YoutubeDL(flat_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                self._flat_cache[url] = info
+                return bool(info.get('entries'))
+        except Exception:
+            return False
+
+    def get_playlist_entries(self, url):
+        if url in self._flat_cache:
+            info = self._flat_cache[url]
+        else:
+            flat_opts = {'quiet': True, 'no_warnings': True, 'extract_flat': True, 'skip_download': True}
+            with yt_dlp.YoutubeDL(flat_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                self._flat_cache[url] = info
+
+        if not info.get('entries') and self._has_list_param(url):
+            pl_url = f"https://www.youtube.com/playlist?list={urllib.parse.parse_qs(urllib.parse.urlparse(url).query)['list'][0]}"
+            if pl_url not in self._flat_cache:
+                try:
+                    flat_opts = {'quiet': True, 'no_warnings': True, 'extract_flat': True, 'skip_download': True}
+                    with yt_dlp.YoutubeDL(flat_opts) as ydl:
+                        pl_info = ydl.extract_info(pl_url, download=False)
+                        self._flat_cache[pl_url] = pl_info
+                        if pl_info.get('entries'):
+                            info = pl_info
+                            self._flat_cache[url] = pl_info
+                except Exception:
+                    pass
+
+        entries = []
+        title = info.get('title', 'Unknown')
+        pid = info.get('id', '')
+        if 'entries' in info and info['entries']:
+            for entry in info['entries']:
+                if entry:
+                    entries.append({
+                        'id': entry.get('id', ''),
+                        'title': entry.get('title', 'Unknown'),
+                        'url': f"https://www.youtube.com/watch?v={entry.get('id', '')}",
+                        'playlist': title,
+                        'playlist_id': pid,
+                    })
+        return entries, title, pid
+
+    @staticmethod
+    def _has_list_param(url):
+        try:
+            qs = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+            return bool(qs.get('list'))
+        except Exception:
+            return False
+
+    def inspect_url(self, url):
+        if url not in self._flat_cache:
+            flat_opts = {'quiet': True, 'no_warnings': True, 'extract_flat': True, 'skip_download': True}
+            with yt_dlp.YoutubeDL(flat_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                self._flat_cache[url] = info
+        info = self._flat_cache[url]
+        entries = info.get('entries')
+        is_pl = bool(entries) or self._has_list_param(url)
+        return {
+            'url': url,
+            'is_playlist': is_pl,
+            'title': info.get('title', 'Unknown'),
+            'entry_count': len(entries) if entries else 0,
+            'id': info.get('id', ''),
+        }
+
+    def get_single_entry(self, url):
+        info = self.get_video_info(url)
+        return {
+            'id': info.get('id', ''),
+            'title': info.get('title', 'Unknown'),
+            'url': url,
+            'playlist': None,
+            'playlist_id': None,
+        }
+
+    def get_single_entry_fast(self, url):
+        if url in self._flat_cache:
+            info = self._flat_cache[url]
+        else:
+            flat_opts = {'quiet': True, 'no_warnings': True, 'extract_flat': True, 'skip_download': True}
+            with yt_dlp.YoutubeDL(flat_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                self._flat_cache[url] = info
+        return {
+            'id': info.get('id', ''),
+            'title': info.get('title', 'Unknown'),
+            'url': url,
+            'playlist': None,
+            'playlist_id': None,
+        }
+
+    def _video_format_string(self):
+        ext = self.config['video']['preferred_format']
+        codec = self.config['video'].get('preferred_codec', 'h264')
+        vcodec = {'h264': 'avc1', 'h265': 'hevc', 'vp9': 'vp9'}.get(codec, 'avc1')
+        priorities = self.config['video'].get('quality_priority', ['480', '360', '720'])
+
+        formats = []
+        for q in priorities:
+            formats.append(f"bestvideo[ext={ext}][vcodec^={vcodec}][height<={q}]+bestaudio[ext=m4a]")
+        formats.append(f"bestvideo[ext={ext}][vcodec^={vcodec}][height<=1080][height>360]+bestaudio[ext=m4a]")
+        formats.append(f"bestvideo[ext={ext}]+bestaudio[ext=m4a]")
+        formats.append("best")
+
+        return "/".join(formats)
+
+    def _audio_format_string(self):
+        ext = self.config['audio']['preferred_format']
+        priorities = self.config['audio'].get('quality_priority', ['128', '192', '264'])
+
+        formats = []
+        for q in priorities:
+            q_int = int(q)
+            formats.append(f"bestaudio[ext={ext}][abr<={q_int + 16}][abr>={max(0, q_int - 16)}]")
+        formats.append(f"bestaudio[ext={ext}]")
+        formats.append("bestaudio")
+
+        return "/".join(formats)
+
+    def _progress_hook(self, d):
+        if d['status'] == 'downloading':
+            speed = d.get('_speed_str', '')
+            pct = d.get('_percent_str', '').strip()
+            if speed:
+                sys.stderr.write(f'\r[download] {pct} at {speed}      ')
+                sys.stderr.flush()
+
+    def _cookies_opts(self):
+        cf = self.config['general'].get('cookies_file', '')
+        if cf:
+            cf_path = self._resolve(cf)
+            if os.path.exists(cf_path):
+                return {'cookiefile': cf_path}
+        return {}
+
+    def _rate_limit_opts(self):
+        val = self.config['general'].get('rate_limit', '')
+        if val:
+            return {'limit_rate': val}
+        return {}
+
+    def _sponsorblock_opts(self):
+        if self.config['general'].get('sponsorblock', True):
+            return {'sponsorblock_mark': 'all'}
+        return {}
+
+    def download_video(self, entry, job_dir):
+        work_dir = self._resolve(job_dir)
+        os.makedirs(work_dir, exist_ok=True)
+
+        tmpl = self.config['general']['filename_template']
+        outtmpl = os.path.join(work_dir, tmpl)
+
+        ydl_opts = {
+            'format': self._video_format_string(),
+            'outtmpl': outtmpl,
+            'quiet': True,
+            'no_warnings': True,
+            'noprogress': True,
+            'writethumbnail': True,
+            'merge_output_format': 'mp4',
+            'skip_download': False,
+            'progress_hooks': [self._progress_hook],
+            'postprocessors': [{'key': 'EmbedThumbnail'}],
+        }
+        ydl_opts.update(self._cookies_opts())
+        ydl_opts.update(self._rate_limit_opts())
+        ydl_opts.update(self._sponsorblock_opts())
+
+        self.logger.info(f"Downloading video: {entry['title']}")
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            try:
+                ydl.download([entry['url']])
+                return self._find_media_file(work_dir)
+            except Exception as e:
+                raise RuntimeError(f"Download failed: {e}")
+
+    def download_audio(self, entry, job_dir):
+        work_dir = self._resolve(job_dir)
+        os.makedirs(work_dir, exist_ok=True)
+
+        tmpl = self.config['general']['filename_template']
+        outtmpl = os.path.join(work_dir, tmpl)
+        quality = self.config['audio']['default_quality']
+
+        ydl_opts = {
+            'format': self._audio_format_string(),
+            'outtmpl': outtmpl,
+            'quiet': True,
+            'no_warnings': True,
+            'noprogress': True,
+            'writethumbnail': True,
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'm4a',
+                'preferredquality': str(quality),
+            }, {
+                'key': 'EmbedThumbnail',
+            }],
+            'skip_download': False,
+            'progress_hooks': [self._progress_hook],
+        }
+
+        ydl_opts.update(self._cookies_opts())
+        ydl_opts.update(self._rate_limit_opts())
+        ydl_opts.update(self._sponsorblock_opts())
+
+        self.logger.info(f"Downloading audio: {entry['title']}")
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            try:
+                ydl.download([entry['url']])
+                return self._find_media_file(work_dir)
+            except Exception as e:
+                raise RuntimeError(f"Download failed: {e}")
+
+    def download_subtitles(self, entry, job_dir):
+        work_dir = self._resolve(job_dir)
+        os.makedirs(work_dir, exist_ok=True)
+
+        tmpl = self.config['general']['filename_template']
+        outtmpl = os.path.join(work_dir, tmpl)
+        lang = self.config['subtitle']['language']
+        prefer_human = self.config['subtitle'].get('prefer_human', True)
+        sub_fmt = self.config['subtitle'].get('preferred_format', 'srt')
+
+        ydl_opts = {
+            'outtmpl': outtmpl,
+            'quiet': True,
+            'no_warnings': True,
+            'skip_download': True,
+            'writesubtitles': True,
+            'writeautomaticsub': True,
+            'subtitleslangs': [lang],
+            'subtitlesformat': sub_fmt,
+            'logger': YtdlpLogger(),
+        }
+
+        ydl_opts.update(self._cookies_opts())
+
+        self.logger.info(f"Downloading subtitles for: {entry['title']}")
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([entry['url']])
+        return self._find_subtitle_file(work_dir, lang, prefer_human)
