@@ -199,10 +199,13 @@ class Downloader:
 
     def _progress_hook(self, d):
         if d['status'] == 'downloading':
-            speed = d.get('_speed_str', '')
             pct = d.get('_percent_str', '').strip()
-            if speed:
-                sys.stderr.write(f'\r[download] {pct} at {speed}      ')
+            speed = d.get('_speed_str', '')
+            eta = d.get('_eta_str', '')
+            total = d.get('_total_bytes_str', '')
+            parts = [p for p in [pct, speed, eta, total] if p]
+            if parts:
+                sys.stderr.write('\r[download] ' + ' • '.join(parts) + '    ')
                 sys.stderr.flush()
 
     def _cookies_opts(self):
