@@ -3,7 +3,7 @@ import os
 import sys
 import subprocess
 
-VERSION = '1.0.0'
+VERSION = '1.0.1'
 
 HELP_TEXT = f"""
 MelT v{VERSION} - YouTube Downloader CLI

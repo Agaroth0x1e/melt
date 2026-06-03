@@ -224,6 +224,12 @@ class Downloader:
             return {'sponsorblock_mark': 'all'}
         return {}
 
+    def _ffmpeg_location_opts(self):
+        path = os.environ.get('FFMPEG_PATH', '')
+        if path:
+            return {'ffmpeg_location': path}
+        return {}
+
     def download_video(self, entry, job_dir):
         work_dir = self._resolve(job_dir)
         os.makedirs(work_dir, exist_ok=True)
@@ -246,6 +252,7 @@ class Downloader:
         ydl_opts.update(self._cookies_opts())
         ydl_opts.update(self._rate_limit_opts())
         ydl_opts.update(self._sponsorblock_opts())
+        ydl_opts.update(self._ffmpeg_location_opts())
 
         self.logger.info(f"Downloading video: {entry['title']}")
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -284,6 +291,7 @@ class Downloader:
         ydl_opts.update(self._cookies_opts())
         ydl_opts.update(self._rate_limit_opts())
         ydl_opts.update(self._sponsorblock_opts())
+        ydl_opts.update(self._ffmpeg_location_opts())
 
         self.logger.info(f"Downloading audio: {entry['title']}")
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -316,6 +324,7 @@ class Downloader:
         }
 
         ydl_opts.update(self._cookies_opts())
+        ydl_opts.update(self._ffmpeg_location_opts())
 
         self.logger.info(f"Downloading subtitles for: {entry['title']}")
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
