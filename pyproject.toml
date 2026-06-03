@@ -1,21 +1,53 @@
 [build-system]
 requires = ["setuptools>=68.0"]
-build-backend = "setuptools.backends._legacy:_Backend"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "melt"
 version = "1.0.0"
-description = "Modern YouTube downloader CLI with subtitle cleaning and parallel processing"
+description = "Modern YouTube downloader CLI with subtitle cleaning, parallel downloads, SponsorBlock, and sound notifications"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.8"
+authors = [
+    {name = "Agaroth0x1e"},
+]
 dependencies = [
     "rich>=13.0.0",
     "yt-dlp>=2023.0.0",
+    "mutagen>=1.47.0",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Video",
+    "Topic :: Utilities",
 ]
 
 [project.urls]
-Source = "https://github.com/user/melt"
+Homepage = "https://github.com/Agaroth0x1e/melt"
+Source = "https://github.com/Agaroth0x1e/melt"
+BugTracker = "https://github.com/Agaroth0x1e/melt/issues"
+
+[project.scripts]
+melt = "main:main"
 
 [tool.setuptools]
-packages = ["utils", "components"]
+packages = ["utils", "components", "config", "sounds"]
+py-modules = ["main", "mother_script"]
+
+[tool.setuptools.package-data]
+config = ["*.json"]
+sounds = ["*.wav"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
