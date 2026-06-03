@@ -1,0 +1,39 @@
+{
+  "general": {
+    "temp_dir": "temp",
+    "downloads_dir": "downloads",
+    "archive_file": "archive/archive.txt",
+    "log_file": "log/log.txt",
+    "failed_file": "failed/failed.txt",
+    "clear_temp": true,
+    "default_format": "video",
+    "max_threads": 3,
+    "timeout_seconds": 5,
+    "filename_template": "%(title)s.%(ext)s",
+    "playlist_folder_template": "%(playlist_title)s",
+    "numbering": false,
+    "duplicate_action": "skip",
+    "cookies_file": "",
+    "rate_limit": "",
+    "dry_run": false,
+    "exit_on_complete": false,
+    "sponsorblock": true,
+    "reverse_playlist": false,
+    "enable_sounds": true
+  },
+  "video": {
+    "preferred_format": "mp4",
+    "quality_priority": ["480", "360", "720"],
+    "preferred_codec": "h264"
+  },
+  "audio": {
+    "preferred_format": "m4a",
+    "quality_priority": ["128", "192", "264"],
+    "default_quality": 128
+  },
+  "subtitle": {
+    "prefer_human": true,
+    "language": "en",
+    "preferred_format": "srt"
+  }
+}
