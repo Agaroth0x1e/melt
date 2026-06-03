@@ -14,13 +14,13 @@
 ## Windows
 
 ### Pre-built .exe (recommended)
-`bin/windows/melt.exe` — **fully standalone**, includes ffmpeg.
+Download from [Releases](https://github.com/Agaroth0x1e/melt/releases) — `melt.exe`, fully standalone, ffmpeg bundled.
 
 ### Build from source (auto-bundles ffmpeg)
 ```batch
 .\BUILD_WINDOWS.bat
 ```
-Output: `bin\windows\melt.exe` — fully standalone with bundled ffmpeg.
+Output: `dist\melt.exe` — fully standalone with bundled ffmpeg.
 
 ### Run from source (no build)
 ```batch
@@ -44,7 +44,7 @@ python3 main.py
 chmod +x build_macos.sh
 ./build_macos.sh
 ```
-Output: `bin/macos/melt` — fully standalone if ffmpeg was bundled.
+Output: `dist/melt` — fully standalone if ffmpeg was bundled.
 
 ---
 
@@ -61,7 +61,7 @@ python3 main.py
 chmod +x build_linux.sh
 ./build_linux.sh
 ```
-Output: `bin/linux/melt` — fully standalone if ffmpeg was bundled.
+Output: `dist/melt` — fully standalone if ffmpeg was bundled.
 
 ---
 

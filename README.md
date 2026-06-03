@@ -4,14 +4,16 @@ Download video, audio, and subtitles from YouTube with a modern CLI. Supports pl
 
 ## Quick Start
 
-**Pre-built (Windows):**
+**Download from Releases (recommended):**
 ```
-bin\windows\melt.exe
+https://github.com/Agaroth0x1e/melt/releases
 ```
+- `melt.exe` — Windows (standalone, ffmpeg bundled)
+- `melt` — Linux (standalone, ffmpeg bundled)
 
-**Pre-built (Linux):**
+**Install via pip:**
 ```
-bin/linux/melt
+pip install https://github.com/Agaroth0x1e/melt/releases/download/v1.0.1/melt-1.0.1-py3-none-any.whl
 ```
 
 **From source:**
