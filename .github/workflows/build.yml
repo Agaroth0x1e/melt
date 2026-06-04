@@ -2,11 +2,19 @@ name: Build
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to upload to'
+        required: true
+        default: 'v1.1.0'
   release:
     types: [published]
 
 permissions:
   contents: write
+
+env:
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
 
 jobs:
   build-windows:
@@ -25,7 +33,7 @@ jobs:
           Remove-Item ffmpeg_temp -Recurse -Force
           Remove-Item ffmpeg.7z
       - run: pyinstaller --onefile --windowed --name melt --add-data "sounds;sounds" --add-data "ffmpeg.exe;." main.py
-      - run: gh release upload ${{ github.ref_name }} dist/melt.exe --clobber
+      - run: gh release upload $TAG dist/melt.exe --clobber
         env:
           GH_TOKEN: ${{ github.token }}
 
@@ -44,7 +52,7 @@ jobs:
           find . -name ffmpeg -type f -exec cp {} . \;
           rm -rf ffmpeg.tar.xz ffmpeg-*-static
       - run: pyinstaller --onefile --name melt --add-data "sounds:sounds" --add-data "ffmpeg:." main.py
-      - run: gh release upload ${{ github.ref_name }} dist/melt --clobber
+      - run: gh release upload $TAG dist/melt --clobber
         env:
           GH_TOKEN: ${{ github.token }}
 
@@ -64,6 +72,6 @@ jobs:
           find ffmpeg_temp -name ffmpeg -type f -exec cp {} . \;
           rm -rf ffmpeg.tar.xz ffmpeg_temp
       - run: pyinstaller --onefile --name melt --add-data "sounds:sounds" --add-data "ffmpeg:." main.py
-      - run: gh release upload ${{ github.ref_name }} dist/melt --clobber
+      - run: gh release upload $TAG dist/melt --clobber
         env:
           GH_TOKEN: ${{ github.token }}
