@@ -122,8 +122,11 @@ All source files are directly in the project root:
 - `find_ffmpeg()`: when bundled, checks `_bundle_dir()/ffmpeg.exe` → `_exe_dir()/ffmpeg.exe` → system PATH
 - `os.environ['FFMPEG_PATH']` only set in standalone builds
 
-### Progress (v1.1.0 — Complete)
-Everything is done for v1.1.0. The project is feature-complete per the original plan.
+### v1.1.0 — Shipped ✅
+- Feature-complete per original plan
+- Published to PyPI: `meltdl` v1.1.0
+- GitHub release with 3 platform binaries: `melt.exe` (Win), `melt-linux` (Linux), `melt-macos` (macOS CLI binary, no `.dmg`)
+- macOS CLI tool ships as a plain binary (no extension) — standard for CLI tools on macOS; `.dmg` is for GUI `.app` bundles
 
 ### Build Workflow
 - `.github/workflows/build.yml` triggers on `workflow_dispatch` (with `tag` input) or `release: [published]`
@@ -131,7 +134,7 @@ Everything is done for v1.1.0. The project is feature-complete per the original 
 - Linux installs ffmpeg via apt (johnvansickle.com is dead)
 - macOS downloads ffmpeg from evermeet.cx
 - Windows downloads ffmpeg from gyan.dev
-- Uploads to release via `gh release upload ${{ env.TAG }}` — distinct names per platform
+- Uses `gh release upload ${{ env.TAG }}` — distinct names per platform to avoid collisions
 - `GITHUB_TOKEN` with `contents: write` permission handles auth
 
 ## Key Decisions (Historical)
@@ -144,3 +147,5 @@ Everything is done for v1.1.0. The project is feature-complete per the original 
 - Project root contains only source code; all runtime dirs auto-generated and gitignored
 - `dry_run` removed from config — runtime toggle via modify menu
 - Audio uses m4a with `mov_text` subtitle embedding + `©lyr` metadata via `mutagen`
+- macOS CLI binary has no extension (`.dmg` is for GUI apps only)
+- Linux binary named `melt-linux`, macOS named `melt-macos`, Windows `melt.exe` — distinct names prevent release asset collisions
