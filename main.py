@@ -221,9 +221,10 @@ def _exe_dir():
 
 def find_ffmpeg():
     if _is_bundled():
+        ffmpeg_name = 'ffmpeg.exe' if sys.platform == 'win32' else 'ffmpeg'
         locations = [
-            os.path.join(_bundle_dir(), 'ffmpeg.exe'),
-            os.path.join(_exe_dir(), 'ffmpeg.exe'),
+            os.path.join(_bundle_dir(), ffmpeg_name),
+            os.path.join(_exe_dir(), ffmpeg_name),
             'ffmpeg',
         ]
         for loc in locations:

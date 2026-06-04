@@ -4,17 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag to upload to'
-        required: true
-        default: 'v1.1.0'
+        description: 'Release tag to upload to (leave empty for artifacts only)'
+        required: false
+        default: ''
   release:
     types: [published]
 
 permissions:
   contents: write
-
-env:
-  TAG: ${{ github.event.inputs.tag || github.ref_name }}
 
 jobs:
   build-windows:
@@ -24,7 +21,9 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - run: pip install pyinstaller yt-dlp rich mutagen
+      - run: pip install pyinstaller yt-dlp rich mutagen pillow
+      - name: Convert icon to ICO
+        run: python -c "from PIL import Image; img = Image.open('ico/icon.png').resize((256,256), Image.LANCZOS); img.save('ico/icon.ico', format='ICO', sizes=[(256,256),(128,128),(64,64),(48,48),(32,32),(16,16)])"
       - name: Download ffmpeg
         run: |
           curl -L -o ffmpeg.7z "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.7z"
@@ -32,8 +31,15 @@ jobs:
           move ffmpeg_temp/*/bin/ffmpeg.exe ffmpeg.exe
           Remove-Item ffmpeg_temp -Recurse -Force
           Remove-Item ffmpeg.7z
-      - run: pyinstaller --onefile --windowed --name melt --add-data "sounds;sounds" --add-data "ffmpeg.exe;." main.py
-      - run: gh release upload ${{ env.TAG }} dist/melt.exe --clobber
+      - run: pyinstaller --onefile --icon "ico/icon.ico" --add-data "sounds;sounds" --add-data "ffmpeg.exe;." --name melt --distpath dist --clean --noconfirm main.py
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: melt-windows
+          path: dist/melt.exe
+      - name: Upload to release (if tag provided)
+        if: ${{ github.event.inputs.tag != '' }}
+        run: gh release upload ${{ github.event.inputs.tag }} dist/melt.exe --clobber
         env:
           GH_TOKEN: ${{ github.token }}
 
@@ -44,13 +50,22 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - run: pip install pyinstaller yt-dlp rich mutagen
+      - run: pip install pyinstaller yt-dlp rich mutagen pillow
+      - name: Convert icon to PNG sizes
+        run: python -c "from PIL import Image; img = Image.open('ico/icon.png').resize((256,256), Image.LANCZOS); img.save('ico/icon.png')"
       - name: Install ffmpeg
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: cp "$(which ffmpeg)" ffmpeg
-      - run: pyinstaller --onefile --name melt --add-data "sounds:sounds" --add-data "ffmpeg:." main.py
+      - run: pyinstaller --onefile --add-data "sounds:sounds" --add-data "ffmpeg:." --name melt --distpath dist --clean --noconfirm main.py
       - run: mv dist/melt dist/melt-linux
-      - run: gh release upload ${{ env.TAG }} dist/melt-linux --clobber
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: melt-linux
+          path: dist/melt-linux
+      - name: Upload to release (if tag provided)
+        if: ${{ github.event.inputs.tag != '' }}
+        run: gh release upload ${{ github.event.inputs.tag }} dist/melt-linux --clobber
         env:
           GH_TOKEN: ${{ github.token }}
 
@@ -61,16 +76,21 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - run: pip install pyinstaller yt-dlp rich mutagen
-      - name: Download ffmpeg
-        run: |
-          curl -L -o ffmpeg.tar.xz "https://evermeet.cx/ffmpeg/ffmpeg-6.1.1.7z"
-          brew install p7zip
-          7z x ffmpeg.tar.xz -offmpeg_temp
-          find ffmpeg_temp -name ffmpeg -type f -exec cp {} . \;
-          rm -rf ffmpeg.tar.xz ffmpeg_temp
-      - run: pyinstaller --onefile --name melt --add-data "sounds:sounds" --add-data "ffmpeg:." main.py
+      - run: pip install pyinstaller yt-dlp rich mutagen pillow
+      - name: Convert icon to PNG sizes
+        run: python -c "from PIL import Image; img = Image.open('ico/icon.png').resize((256,256), Image.LANCZOS); img.save('ico/icon.png')"
+      - name: Install ffmpeg
+        run: brew install ffmpeg
+      - run: cp "$(which ffmpeg)" ffmpeg
+      - run: pyinstaller --onefile --add-data "sounds:sounds" --add-data "ffmpeg:." --name melt --distpath dist --clean --noconfirm main.py
       - run: mv dist/melt dist/melt-macos
-      - run: gh release upload ${{ env.TAG }} dist/melt-macos --clobber
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: melt-macos
+          path: dist/melt-macos
+      - name: Upload to release (if tag provided)
+        if: ${{ github.event.inputs.tag != '' }}
+        run: gh release upload ${{ github.event.inputs.tag }} dist/melt-macos --clobber
         env:
           GH_TOKEN: ${{ github.token }}
