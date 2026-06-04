@@ -1,0 +1,69 @@
+name: Build
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pyinstaller yt-dlp rich mutagen
+      - name: Download ffmpeg
+        run: |
+          curl -L -o ffmpeg.7z "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.7z"
+          7z x ffmpeg.7z -offmpeg_temp ffmpeg-*/bin/ffmpeg.exe
+          move ffmpeg_temp/*/bin/ffmpeg.exe ffmpeg.exe
+          Remove-Item ffmpeg_temp -Recurse -Force
+          Remove-Item ffmpeg.7z
+      - run: pyinstaller --onefile --windowed --name melt --add-data "sounds;sounds" --add-data "ffmpeg.exe;." main.py
+      - run: gh release upload ${{ github.ref_name }} dist/melt.exe --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pyinstaller yt-dlp rich mutagen
+      - name: Download ffmpeg
+        run: |
+          curl -L -o ffmpeg.tar.xz "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz"
+          tar xf ffmpeg.tar.xz
+          find . -name ffmpeg -type f -exec cp {} . \;
+          rm -rf ffmpeg.tar.xz ffmpeg-*-static
+      - run: pyinstaller --onefile --name melt --add-data "sounds:sounds" --add-data "ffmpeg:." main.py
+      - run: gh release upload ${{ github.ref_name }} dist/melt --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pyinstaller yt-dlp rich mutagen
+      - name: Download ffmpeg
+        run: |
+          curl -L -o ffmpeg.tar.xz "https://evermeet.cx/ffmpeg/ffmpeg-6.1.1.7z"
+          brew install p7zip
+          7z x ffmpeg.tar.xz -offmpeg_temp
+          find ffmpeg_temp -name ffmpeg -type f -exec cp {} . \;
+          rm -rf ffmpeg.tar.xz ffmpeg_temp
+      - run: pyinstaller --onefile --name melt --add-data "sounds:sounds" --add-data "ffmpeg:." main.py
+      - run: gh release upload ${{ github.ref_name }} dist/melt --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
