@@ -53,7 +53,8 @@ jobs:
           chmod +x ffmpeg
           rm -rf ffmpeg.tar.xz ffmpeg-*-static
       - run: pyinstaller --onefile --name melt --add-data "sounds:sounds" --add-data "ffmpeg:." main.py
-      - run: gh release upload ${{ env.TAG }} dist/melt --clobber
+      - run: mv dist/melt dist/melt-linux
+      - run: gh release upload ${{ env.TAG }} dist/melt-linux --clobber
         env:
           GH_TOKEN: ${{ github.token }}
 
@@ -73,6 +74,7 @@ jobs:
           find ffmpeg_temp -name ffmpeg -type f -exec cp {} . \;
           rm -rf ffmpeg.tar.xz ffmpeg_temp
       - run: pyinstaller --onefile --name melt --add-data "sounds:sounds" --add-data "ffmpeg:." main.py
-      - run: gh release upload ${{ env.TAG }} dist/melt --clobber
+      - run: mv dist/melt dist/melt-macos
+      - run: gh release upload ${{ env.TAG }} dist/melt-macos --clobber
         env:
           GH_TOKEN: ${{ github.token }}
