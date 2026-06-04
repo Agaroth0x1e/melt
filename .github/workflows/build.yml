@@ -33,7 +33,7 @@ jobs:
           Remove-Item ffmpeg_temp -Recurse -Force
           Remove-Item ffmpeg.7z
       - run: pyinstaller --onefile --windowed --name melt --add-data "sounds;sounds" --add-data "ffmpeg.exe;." main.py
-      - run: gh release upload $TAG dist/melt.exe --clobber
+      - run: gh release upload ${{ env.TAG }} dist/melt.exe --clobber
         env:
           GH_TOKEN: ${{ github.token }}
 
@@ -50,9 +50,10 @@ jobs:
           curl -L -o ffmpeg.tar.xz "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz"
           tar xf ffmpeg.tar.xz
           find . -name ffmpeg -type f -exec cp {} . \;
+          chmod +x ffmpeg
           rm -rf ffmpeg.tar.xz ffmpeg-*-static
       - run: pyinstaller --onefile --name melt --add-data "sounds:sounds" --add-data "ffmpeg:." main.py
-      - run: gh release upload $TAG dist/melt --clobber
+      - run: gh release upload ${{ env.TAG }} dist/melt --clobber
         env:
           GH_TOKEN: ${{ github.token }}
 
@@ -72,6 +73,6 @@ jobs:
           find ffmpeg_temp -name ffmpeg -type f -exec cp {} . \;
           rm -rf ffmpeg.tar.xz ffmpeg_temp
       - run: pyinstaller --onefile --name melt --add-data "sounds:sounds" --add-data "ffmpeg:." main.py
-      - run: gh release upload $TAG dist/melt --clobber
+      - run: gh release upload ${{ env.TAG }} dist/melt --clobber
         env:
           GH_TOKEN: ${{ github.token }}
