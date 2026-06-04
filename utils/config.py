@@ -71,14 +71,17 @@ class Config:
                 "duplicate_action": "skip",
                 "cookies_file": "",
                 "rate_limit": "",
-                "dry_run": False,
                 "exit_on_complete": False,
                 "sponsorblock": True,
                 "reverse_playlist": False,
                 "enable_sounds": True,
                 "default_reuse": True,
                 "format_preview": False,
-                "merge_mode": False
+                "merge_mode": False,
+                "extract_flat": {
+                    "inspect": True,
+                    "search": False
+                }
             },
             "video": {
                 "preferred_format": "mp4",
@@ -100,6 +103,12 @@ class Config:
                 "path": "watch",
                 "interval_seconds": 60,
                 "auto_delete": True,
+                "default_format": "video",
+                "default_dest": "downloads",
+            },
+            "search": {
+                "filter_type": "all",
+                "default_sort": "relevance"
             },
             "chapter_splitter": {
                 "enabled": False,
@@ -130,8 +139,6 @@ class Config:
             errors.append("general.clear_temp must be true/false")
         if not isinstance(g.get("numbering"), bool):
             errors.append("general.numbering must be true/false")
-        if not isinstance(g.get("dry_run", False), bool):
-            errors.append("general.dry_run must be true/false")
         if not isinstance(g.get("sponsorblock", True), bool):
             errors.append("general.sponsorblock must be true/false")
         if not isinstance(g.get("reverse_playlist", False), bool):
@@ -146,6 +153,14 @@ class Config:
             errors.append("general.format_preview must be true/false")
         if not isinstance(g.get("merge_mode", False), bool):
             errors.append("general.merge_mode must be true/false")
+        ef = g.get("extract_flat", {})
+        if not isinstance(ef, dict):
+            errors.append("general.extract_flat must be an object")
+        else:
+            if not isinstance(ef.get("inspect", True), bool):
+                errors.append("general.extract_flat.inspect must be true/false")
+            if not isinstance(ef.get("search", False), bool):
+                errors.append("general.extract_flat.search must be true/false")
         v = self.config.get("video", {})
         if v.get("preferred_format") not in ("mp4", "mkv", "webm"):
             errors.append("video.preferred_format must be 'mp4', 'mkv', or 'webm'")
@@ -163,6 +178,11 @@ class Config:
         s = self.config.get("subtitle", {})
         if not isinstance(s.get("language"), str) or len(s["language"]) < 2:
             errors.append("subtitle.language must be a valid language code (e.g. 'en')")
+        sc = self.config.get("search", {})
+        if sc.get("filter_type") not in ("all", "video", "playlist", None):
+            errors.append("search.filter_type must be 'all', 'video', or 'playlist'")
+        if sc.get("default_sort") not in ("relevance", "views", "date", "duration", None):
+            errors.append("search.default_sort must be 'relevance', 'views', 'date', or 'duration'")
         if not isinstance(s.get("prefer_human"), bool):
             errors.append("subtitle.prefer_human must be true/false")
         if s.get("preferred_format") not in ("srt", "vtt", "ass"):

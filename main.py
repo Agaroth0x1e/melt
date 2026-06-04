@@ -5,93 +5,201 @@ import time
 import json
 import subprocess
 
-VERSION = '1.0.1'
+VERSION = '1.1.0'
 
 HELP_TEXT = f"""
-MelT v{VERSION} - YouTube Downloader CLI
+MelT v{VERSION}
 
 USAGE:
-  python main.py                    Interactive mode (default)
-  python main.py --help             Show this help message
-  python main.py --version          Show version
-  python main.py --resume           Resume interrupted download queue
-  python main.py --profile <name>   Load a saved config profile
-  python main.py profile <action>   Manage profiles (save/list/delete/show)
-  python main.py analytics          Show download statistics and trends
-  python main.py sync <action>      Cloud sync config/data via git
-  python main.py search <query>     Search YouTube and download results
-  python main.py rule <action>      Manage auto-rules (add/list/remove)
-  python main.py watch              Watch folder for URL files
-  python main.py schedule <action>  Manage scheduled downloads (add/list/remove/daemon)
-  python main.py dashboard          Open TUI dashboard
-  python main.py export <file>      Export URLs as a shareable queue file
-  python main.py import <file>      Import URLs from a queue file
+  python main.py                          Interactive mode (default)
+  python main.py --help / -h              Show this help message
+  python main.py --version                Show version
+  python main.py --resume                 Resume interrupted download queue
+  python main.py --profile <name>         Load a saved config profile
+
+  [BATCH COMMANDS]
+  python main.py profile <action> [name]  Manage config profiles
+  python main.py rule <action> [args]     Manage auto-rules
+  python main.py schedule <action> [args] Manage scheduled downloads
+  python main.py search <query>           Search YouTube and download
+  python main.py watch                    Watch folder for URL files
+  python main.py dashboard / tui          Open TUI dashboard
+  python main.py analytics / stats        Show download statistics
+  python main.py sync <action> [args]     Cloud sync via git
+  python main.py export <file>            Export URLs as .meltqueue
+  python main.py import <file>            Import URLs from .meltqueue
 
 DESCRIPTION:
-  Download video, audio, and subtitles from YouTube with a
-  modern CLI interface (MelT v{VERSION}). Supports playlists,
-  thumbnail embedding, subtitle cleaning, SponsorBlock,
-  and parallel downloads.
+  MelT is a modern YouTube downloader CLI built on yt-dlp and Rich.
+  It wraps yt-dlp with parallel processing, subtitle cleaning,
+  thumbnail embedding, SponsorBlock, playlists, dry-run mode,
+  queue persistence, sound notifications, format preview,
+  style profiles, auto-rules, scheduled downloads, watch folders,
+  collaborative queues, and a TUI dashboard.
 
 FEATURES:
-  - Single video / playlist / multi-URL / batch file (@file.txt)
-  - Video (mp4) or Audio (m4a) with thumbnail & subtitle embedding
-  - Automatic subtitle download with roll-up caption cleaning
-  - Configurable parallel downloads (multi-threaded)
-  - Archive system to avoid re-downloading duplicates
-  - SponsorBlock integration (auto-skip sponsored segments)
-  - Download queue persistence (resume crashes with --resume)
-  - Dry-run mode to preview before downloading
+
+  [1] Core Download
+  - Single video, playlists, multi-URL (space-separated), batch files (@file.txt)
+  - Format: Video (1), Audio (2), or Both (3 — downloads video+audio in parallel)
+  - Auto-sorted into downloads/videos/ and downloads/audio/
+  - Parallel downloads via thread pool (configurable max_threads)
+  - Thumbnail embedding for both video and audio
+  - Subtitle download with roll-up caption cleaning and SRT conversion
+  - SponsorBlock integration (auto-marks sponsored segments)
   - Rate limiting and cookies file support
-  - Session-persistent options (reuse settings between batches)
-  - Style profiles (save/load config presets)
-  - Custom sound profiles (configurable notification sounds)
-  - YouTube search (search and pipe results to download queue)
-  - Download analytics (statistics, trends, charts)
-  - Auto-rules (keyword/channel/URL matching for auto-format/dest)
-  - Collaborative queue (.meltqueue export/import for sharing)
-  - Pre-built standalone .exe (ffmpeg included)
-  - Fully configurable via config/config.json
+  - Duplicate detection: skip / overwrite / keep (auto-counter)
+  - Dry-run mode: preview without downloading
+
+  [2] Playlist & Diff
+  - Auto-detects playlists, asks for range (e.g. 1-5, 3,7-10, all)
+  - Playlist snapshot system — first time you download a playlist,
+    MelT saves its video list. Next time, it shows what's new (+N)
+    and what's removed (-M). Updated after every fetch.
+  - Optional reverse_playlist, playlist_folder_template
+
+  [3] Format Preview
+  - Set format_preview: true in config to see a Rich table of
+    available formats before each download. Pick a format ID to
+    override auto-selection, or press Enter to let yt-dlp decide.
+
+  [4] Merge Mode
+  - Set merge_mode: true to download video and audio streams
+    separately and merge them with MelT's own ffmpeg call.
+    Useful when yt-dlp's internal merge fails.
+
+  [5] Chapter Splitter
+  - Set chapter_splitter.enabled: true to auto-split downloaded
+    videos into per-chapter files (named Title - Chapter Name.mp4).
+    Original file is kept. Non-fatal on failure.
+
+  [6] Session Persistence
+  - After first batch, MelT remembers your settings and offers
+    to reuse: Y=yes, n=no, m=modify, s=show, q=quit
+  - Queue persistence: interrupted downloads resume with --resume
+
+  [7] Sound Notifications
+  - 6 configurable sounds (batch_start, analyze_complete,
+    download_error, aborting, fatal_error, completion)
+  - Each overridable via config sounds section (WAV files)
+  - Uses ffplay or ffmpeg for playback
+
+  [8] Style Profiles
+  - python main.py profile save <name>   Save current config as preset
+  - python main.py profile list          List saved profiles
+  - python main.py profile show <name>   View a profile
+  - python main.py profile delete <name> Delete a profile
+  - python main.py --profile <name>      Start with a profile loaded
+
+  [9] Auto-Rules
+  - python main.py rule add --keyword "tutorial" --fmt audio --dest music
+    Matches downloads by keyword in title, channel name, or URL pattern,
+    and auto-applies format and/or destination.
+  - python main.py rule add --channel "ChannelName" --fmt video
+  - python main.py rule add --url "pattern" --fmt both
+  - python main.py rule list     View all rules
+  - python main.py rule remove <id>  Remove a rule
+
+  [10] Scheduled Downloads
+  - python main.py schedule add URL --interval 24
+    Downloads the URL every 24 hours.
+  - python main.py schedule add URL --at 08:00 --fmt audio
+    Downloads daily at 8 AM.
+  - python main.py schedule list    View all scheduled jobs
+  - python main.py schedule remove <id>   Remove a job
+  - python main.py schedule daemon   Run scheduler loop (checks every 60s)
+    Single-run jobs auto-disable after first execution.
+
+  [11] Watch Folder
+  - python main.py watch
+    Monitors a folder (config: watch_folder.path, default "watch/")
+    for URL files. Any file containing URLs is read and auto-downloaded.
+    Trigger files are deleted after processing. Checks every N seconds
+    (config: watch_folder.interval_seconds).
+
+  [12] YouTube Search
+  - python main.py search "query"
+    Searches YouTube via yt-dlp, shows up to 30 results in a Rich table
+    (title, channel, duration, views). Enter indices (1,3,5-8), "all",
+    or Enter to cancel. Selected results go straight to download queue.
+
+  [13] Download Analytics
+  - python main.py analytics
+    Shows total/downloads, total/average size, format breakdown,
+    month-by-month bar chart, and last 10 downloads.
+    Data is tracked from every successful download.
+
+  [14] Cloud Sync
+  - python main.py sync init <remote-url>
+    Initializes a dedicated git repo at config/sync/ that tracks
+    config, rules, schedule, profiles, stats, and playlist snapshots.
+  - python main.py sync push [message]   Commit + push changes
+  - python main.py sync pull             Pull latest changes
+  - python main.py sync status           Show git status + recent commits
+
+  [15] TUI Dashboard
+  - python main.py dashboard
+    Full-screen Rich TUI with live stats panel, recent downloads table,
+    and keyboard controls (q=quit, r=refresh, d=open downloads folder).
+
+  [16] Collaborative Queue
+  - python main.py export queue.melt
+    Exports URLs + format + destination to a shareable .meltqueue file.
+  - python main.py import queue.melt
+    Imports URLs from a .meltqueue file and starts download.
 
 INLINE HELP:
-  Type "help" at the URL prompt for detailed guidance.
+  Type "help" at the URL prompt for detailed interactive guidance.
 
 SHORTCUTS:
   q / quit / exit    Exit at most prompts
   help               Show inline help (at URL prompt)
   m                  Modify options before starting
   Enter              Accept default / auto-confirm
+  Ctrl+C             Abort current batch immediately
 
 REQUIREMENTS:
-  - ffmpeg (bundled in .exe, or system install)
-  - Node.js (optional - 2x yt-dlp speed)
+  - ffmpeg (bundled in .exe, or system install via scoop/brew/apt/pkg)
+  - Node.js (optional — enables 2x yt-dlp speed)
+  - git (optional — required for cloud sync)
 
 CONFIGURATION:
-  See config/config.json for all available options.
-  timeout_seconds: set to -1 to disable auto-confirm timeout.
-  Use 'melt profile save <name>' to save your current config as a preset.
+  All defaults in config/config.json:
+    general.format, max_threads, timeout_seconds (-1 = no timeout),
+    numbering, duplicate_action (skip/overwrite/keep),
+    exit_on_complete, sponsorblock, reverse_playlist, enable_sounds,
+    default_reuse, format_preview, merge_mode
+    watch_folder (path, interval_seconds, auto_delete)
+    chapter_splitter (enabled, output_template)
+  Video/audio quality priorities, preferred_format, preferred_codec
+  Subtitle language, prefer_human, preferred_format
+  Sound profiles (override bundled WAVs)
 
 EXAMPLES:
-  python main.py                    Start interactive session
-  python main.py --resume           Resume interrupted download queue
-  python main.py --profile gaming   Start with 'gaming' profile
-  python main.py --version          Show version
-  python main.py --help             Show this help
-  python main.py export queue.melt    Export URLs to a shareable queue file
-  python main.py import queue.melt    Import URLs from a queue file
-  python main.py profile save gaming  Save current config as 'gaming'
-  python main.py profile list         List saved profiles
-  python main.py analytics           Show download analytics
-  python main.py sync init <url>     Initialize cloud sync
-  python main.py sync push           Push changes to cloud
-  python main.py search "lofi beats"   Search YouTube
-  python main.py rule add --keyword "music" --fmt audio   Rule: keyword-match
-  python main.py rule list             List all auto-rules
-  python main.py watch                 Start watch folder daemon
-  python main.py schedule add URL --interval 24  Schedule URL every 24h
-  python main.py schedule list         List all scheduled jobs
-  python main.py schedule daemon       Run scheduler daemon
-  python main.py dashboard             Open TUI dashboard
+  python main.py                                  Start interactive session
+  python main.py --resume                         Resume interrupted queue
+  python main.py --profile gaming                 Start with 'gaming' profile
+
+  python main.py profile save work                Save current config
+  python main.py profile list                     List saved profiles
+
+  python main.py search "lofi hip hop"            Search and download
+  python main.py analytics                        View download stats
+  python main.py dashboard                        Open TUI dashboard
+
+  python main.py rule add --keyword tutorial --fmt audio --dest podcasts
+  python main.py rule list
+
+  python main.py schedule add URL --interval 24   Download every 24h
+  python main.py schedule daemon                  Start scheduler
+  python main.py watch                            Start folder watcher
+
+  python main.py sync init https://github.com/user/repo.git
+  python main.py sync push "updated rules"
+  python main.py sync status
+
+  python main.py export batch.melt                Export queue
+  python main.py import batch.melt                Import queue
 """
 
 
@@ -327,93 +435,152 @@ def main():
         if not query:
             sys.exit(0)
         import yt_dlp
-        print("Searching...")
-        try:
-            with yt_dlp.YoutubeDL({'quiet': True, 'no_warnings': True, 'extract_flat': True}) as ydl:
-                results = ydl.extract_info(f"ytsearch30:{query}", download=False)
-        except Exception as e:
-            print(f"Search failed: {e}")
-            sys.exit(1)
-        entries = results.get('entries', [])
-        if not entries:
-            print("No results found")
-            sys.exit(0)
 
-        try:
-            from rich.table import Table
-            from rich.console import Console
-            console = Console()
-            table = Table(title=f"Search results: {query}")
-            table.add_column("#", style="dim", width=4)
-            table.add_column("Title", ratio=3)
-            table.add_column("Channel", ratio=2)
-            table.add_column("Duration", ratio=1)
-            table.add_column("Views", ratio=1)
-            for i, e in enumerate(entries, 1):
-                dur = e.get('duration', 0) or 0
-                dur_str = f"{dur // 60}:{dur % 60:02d}" if dur else '?'
-                views = e.get('view_count', 0) or 0
-                views_str = f"{views:,}" if views else '?'
-                table.add_row(str(i), e.get('title', '?')[:60], e.get('uploader', '?')[:25], dur_str, views_str)
-            console.print(table)
-        except ImportError:
-            print("\nResults:")
-            for i, e in enumerate(entries, 1):
-                print(f"  {i}. {e.get('title', '?')} - {e.get('uploader', '?')}")
+        def _is_pl(e):
+            ie = e.get('ie_key', '')
+            url = e.get('url', '')
+            return ie == 'YoutubePlaylist' or 'playlist?list=' in url or '/playlist?' in url
 
-        print("\nEnter numbers to download (e.g. 1,3,5-8), 'all' for all, or Enter to cancel:")
-        choice = input("> ").strip().lower()
-        if not choice:
-            sys.exit(0)
+        def _rel_date(ud):
+            if not ud:
+                return ''
+            from datetime import datetime
+            try:
+                if isinstance(ud, (int, float)):
+                    d = datetime.fromtimestamp(ud)
+                else:
+                    d = datetime.strptime(str(ud), '%Y%m%d')
+                diff = datetime.now() - d
+                days = diff.days
+                if days < 1: return 'today'
+                if days == 1: return 'yesterday'
+                if days < 7: return f'{days}d ago'
+                if days < 30: return f'{days // 7}w ago'
+                if days < 365: return f'{days // 30}mo ago'
+                return f'{days // 365}y ago'
+            except Exception:
+                return ''
 
-        selected = []
-        if choice == 'all':
-            selected = [e['url'] if e.get('url') else f"https://www.youtube.com/watch?v={e['id']}" for e in entries if e]
-        else:
-            parts = choice.replace(',', ' ').split()
-            for part in parts:
-                if '-' in part:
-                    try:
-                        a, b = part.split('-')
-                        for idx in range(int(a), int(b) + 1):
+        from utils.config import Config as SConfig
+        s_cfg = SConfig()
+        sc = s_cfg.get('search', {})
+        filter_type = sc.get('filter_type', 'all')
+        default_sort = sc.get('default_sort', 'relevance')
+        search_flat = s_cfg.get('general', {}).get('extract_flat', {}).get('search', False)
+
+        total_wanted = 30
+        while True:
+            print(f"Searching ({total_wanted} results)...")
+            try:
+                with yt_dlp.YoutubeDL({'quiet': True, 'no_warnings': True, 'extract_flat': search_flat}) as ydl:
+                    results = ydl.extract_info(f"ytsearch{total_wanted}:{query}", download=False)
+            except Exception as e:
+                print(f"Search failed: {e}")
+                sys.exit(1)
+            entries = results.get('entries', [])
+            if not entries:
+                print("No results found")
+                sys.exit(0)
+
+            if filter_type == 'video':
+                entries = [e for e in entries if not _is_pl(e)]
+            elif filter_type == 'playlist':
+                entries = [e for e in entries if _is_pl(e)]
+
+            if default_sort == 'views':
+                entries.sort(key=lambda e: e.get('view_count', 0) or 0, reverse=True)
+            elif default_sort == 'date':
+                entries.sort(key=lambda e: e.get('upload_date', '') or '', reverse=True)
+            elif default_sort == 'duration':
+                entries.sort(key=lambda e: e.get('duration', 0) or 0, reverse=True)
+
+            if not entries:
+                print("No matching results")
+                sys.exit(0)
+
+            try:
+                from rich.table import Table
+                from rich.console import Console
+                console = Console()
+                table = Table(title=f"Search results: {query}")
+                table.add_column("#", style="dim", width=4)
+                table.add_column("T", width=3)
+                table.add_column("Title", ratio=3)
+                table.add_column("Channel", ratio=2)
+                table.add_column("Date", width=10)
+                table.add_column("Duration", width=6)
+                table.add_column("Views", width=8)
+                for i, e in enumerate(entries, 1):
+                    etype = '[P]' if _is_pl(e) else '[V]'
+                    dur = int(e.get('duration', 0) or 0)
+                    dur_str = f"{dur // 60}:{dur % 60:02d}" if dur else '?'
+                    views = e.get('view_count', 0) or 0
+                    views_str = f"{views:,}" if views else '?'
+                    rdate = _rel_date(e.get('upload_date', ''))
+                    table.add_row(str(i), etype, e.get('title', '?')[:55], e.get('uploader', '?')[:22], rdate, dur_str, views_str)
+                console.print(table)
+            except ImportError:
+                print("\nResults:")
+                for i, e in enumerate(entries, 1):
+                    tag = '[P]' if _is_pl(e) else '[V]'
+                    print(f"  {i}. {tag} {e.get('title', '?')} - {e.get('uploader', '?')}")
+                print(f"\nEnter numbers to download (e.g. 1,3,5-8), 'all' for all, 'more' for next {total_wanted}, or Enter to cancel:")
+            print(f"\nEnter numbers to download (e.g. 1,3,5-8), 'all' for all, 'more' for next {total_wanted}, or Enter to cancel:")
+            choice = input().strip().lower()
+            if not choice:
+                sys.exit(0)
+            if choice == 'more':
+                total_wanted += 30
+                continue
+
+            selected = []
+            if choice == 'all':
+                selected = [e['url'] if e.get('url') else f"https://www.youtube.com/watch?v={e['id']}" for e in entries if e]
+            else:
+                parts = choice.replace(',', ' ').split()
+                for part in parts:
+                    if '-' in part:
+                        try:
+                            a, b = part.split('-')
+                            for idx in range(int(a), int(b) + 1):
+                                if 1 <= idx <= len(entries):
+                                    e = entries[idx - 1]
+                                    selected.append(e['url'] if e.get('url') else f"https://www.youtube.com/watch?v={e['id']}")
+                        except ValueError:
+                            pass
+                    else:
+                        try:
+                            idx = int(part)
                             if 1 <= idx <= len(entries):
                                 e = entries[idx - 1]
                                 selected.append(e['url'] if e.get('url') else f"https://www.youtube.com/watch?v={e['id']}")
-                    except ValueError:
-                        pass
-                else:
-                    try:
-                        idx = int(part)
-                        if 1 <= idx <= len(entries):
-                            e = entries[idx - 1]
-                            selected.append(e['url'] if e.get('url') else f"https://www.youtube.com/watch?v={e['id']}")
-                    except ValueError:
-                        pass
+                        except ValueError:
+                            pass
 
-        if not selected:
-            print("No valid selections")
+            if not selected:
+                print("No valid selections")
+                sys.exit(0)
+
+            print(f"Selected {len(selected)} result(s)")
+            from utils.config import Config as SConfig
+            from utils.logger import Logger as SLogger
+            from utils.archive import Archive
+            from utils.failed import FailedTracker
+            from utils.skipped import SkippedTracker
+            from utils.cli import CLI
+            from mother_script import MotherScript
+            s_cfg = SConfig()
+            s_log = SLogger(s_cfg.resolve_path(s_cfg['general']['log_file']))
+            s_ms = MotherScript(
+                s_cfg, s_log,
+                Archive(s_cfg.resolve_path(s_cfg['general']['archive_file'])),
+                FailedTracker(s_cfg.resolve_path(s_cfg['general']['failed_file'])),
+                SkippedTracker(s_cfg.resolve_path(s_cfg['general']['skipped_file'])),
+                CLI(s_cfg)
+            )
+            s_ms.batch_download(' '.join(selected), s_cfg['general']['default_format'],
+                                s_cfg['general']['downloads_dir'])
             sys.exit(0)
-
-        print(f"Selected {len(selected)} result(s)")
-        from utils.config import Config as SConfig
-        from utils.logger import Logger as SLogger
-        from utils.archive import Archive
-        from utils.failed import FailedTracker
-        from utils.skipped import SkippedTracker
-        from utils.cli import CLI
-        from mother_script import MotherScript
-        s_cfg = SConfig()
-        s_log = SLogger(s_cfg.resolve_path(s_cfg['general']['log_file']))
-        s_ms = MotherScript(
-            s_cfg, s_log,
-            Archive(s_cfg.resolve_path(s_cfg['general']['archive_file'])),
-            FailedTracker(s_cfg.resolve_path(s_cfg['general']['failed_file'])),
-            SkippedTracker(s_cfg.resolve_path(s_cfg['general']['skipped_file'])),
-            CLI(s_cfg)
-        )
-        s_ms.batch_download(' '.join(selected), s_cfg['general']['default_format'],
-                            s_cfg['general']['downloads_dir'])
-        sys.exit(0)
 
     if len(sys.argv) >= 2 and sys.argv[1] == 'watch':
         from utils.config import Config as WConfig

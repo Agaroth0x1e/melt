@@ -17,6 +17,7 @@ class Downloader:
         self.logger = logger
         self._info_cache = {}
         self._flat_cache = {}
+        self._flat = config.get('general', {}).get('extract_flat', {}).get('inspect', True)
 
     def _resolve(self, path):
         return path if os.path.isabs(path) else self.config.resolve_path(path)
@@ -73,7 +74,7 @@ class Downloader:
         if url in self._flat_cache:
             return bool(self._flat_cache[url].get('entries'))
         try:
-            flat_opts = {'quiet': True, 'no_warnings': True, 'extract_flat': True, 'skip_download': True}
+            flat_opts = {'quiet': True, 'no_warnings': True, 'extract_flat': self._flat, 'skip_download': True}
             with yt_dlp.YoutubeDL(flat_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
                 self._flat_cache[url] = info
@@ -85,7 +86,7 @@ class Downloader:
         if url in self._flat_cache:
             info = self._flat_cache[url]
         else:
-            flat_opts = {'quiet': True, 'no_warnings': True, 'extract_flat': True, 'skip_download': True}
+            flat_opts = {'quiet': True, 'no_warnings': True, 'extract_flat': self._flat, 'skip_download': True}
             with yt_dlp.YoutubeDL(flat_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
                 self._flat_cache[url] = info
@@ -94,7 +95,7 @@ class Downloader:
             pl_url = f"https://www.youtube.com/playlist?list={urllib.parse.parse_qs(urllib.parse.urlparse(url).query)['list'][0]}"
             if pl_url not in self._flat_cache:
                 try:
-                    flat_opts = {'quiet': True, 'no_warnings': True, 'extract_flat': True, 'skip_download': True}
+                    flat_opts = {'quiet': True, 'no_warnings': True, 'extract_flat': self._flat, 'skip_download': True}
                     with yt_dlp.YoutubeDL(flat_opts) as ydl:
                         pl_info = ydl.extract_info(pl_url, download=False)
                         self._flat_cache[pl_url] = pl_info
@@ -129,7 +130,7 @@ class Downloader:
 
     def inspect_url(self, url):
         if url not in self._flat_cache:
-            flat_opts = {'quiet': True, 'no_warnings': True, 'extract_flat': True, 'skip_download': True}
+            flat_opts = {'quiet': True, 'no_warnings': True, 'extract_flat': self._flat, 'skip_download': True}
             with yt_dlp.YoutubeDL(flat_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
                 self._flat_cache[url] = info
@@ -158,7 +159,7 @@ class Downloader:
         if url in self._flat_cache:
             info = self._flat_cache[url]
         else:
-            flat_opts = {'quiet': True, 'no_warnings': True, 'extract_flat': True, 'skip_download': True}
+            flat_opts = {'quiet': True, 'no_warnings': True, 'extract_flat': self._flat, 'skip_download': True}
             with yt_dlp.YoutubeDL(flat_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
                 self._flat_cache[url] = info

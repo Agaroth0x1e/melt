@@ -14,6 +14,7 @@ console = Console()
 
 def timed_prompt(prompt_text, timeout, default):
     console.print(prompt_text, end="")
+    sys.stderr.flush()
     sys.stdout.flush()
 
     if timeout < 0:
@@ -36,7 +37,7 @@ def timed_prompt(prompt_text, timeout, default):
         time_module.sleep(0.05)
 
     if not _any_key:
-        console.print()
+        print()
         return default
 
     line = input()
@@ -50,16 +51,16 @@ class CLI:
 
     def show_banner(self):
         banner = Text("""
-    +=====================================================+
-    |              MelT - YouTube Downloader              |
-    |                Modern Python CLI v1.0               |
-    +=====================================================+
+    +====================+
+    |       MelT         |
+    |      v1.1.0        |
+    +====================+
 """, style="bold cyan")
         self.console.print(Align.center(banner))
         self.console.print()
 
     def ask_url(self):
-        return Prompt.ask("[bold yellow]Enter YouTube URL[/] (or type 'help' for info)").strip()
+        return console.input("[bold yellow]Enter YouTube URL or URLs[/]: ").strip()
 
     def ask_reuse_settings(self, prev):
         self.console.print("\n[bold]Previous session settings:[/]")
@@ -149,7 +150,7 @@ class CLI:
             size_str = f"{size / 1048576:.1f} MB" if size else "~"
             table.add_row(fmt_id, ext, typ, quality, codec, size_str)
         self.console.print(table)
-        choice = Prompt.ask("[bold yellow]Enter format ID to use[/] (or press Enter for auto)", default="")
+        choice = console.input("[bold yellow]Enter format ID to use[/] (or press Enter for auto): ")
         return choice.strip() if choice.strip() else None
 
     def show_start_prompt(self, timeout, force_modify=False):
@@ -230,8 +231,66 @@ class CLI:
         )
         self.console.print(panel)
 
+    def show_main_menu(self, show_table=True):
+        if show_table:
+            self.console.print()
+            table = Table(box=box.ROUNDED, title="[bold cyan]MelT Main Menu[/]", title_justify="center", border_style="cyan")
+            table.add_column("Option", style="yellow", width=6)
+            table.add_column("Action", style="green", width=24)
+            table.add_column("Description", style="white", width=40)
+            table.add_row("1", "Download from URL", "Enter URLs, playlists, batch files")
+            table.add_row("2", "Search YouTube", "Search and download results")
+            table.add_row("3", "View Analytics", "Download statistics and trends")
+            table.add_row("4", "Open Dashboard", "TUI live dashboard")
+            table.add_row("5", "Scheduled Downloads", "Manage recurring downloads")
+            table.add_row("6", "Auto-Rules", "Manage download rules")
+            table.add_row("7", "Watch Folder", "Start folder watcher")
+            table.add_row("8", "Cloud Sync", "Sync config via git")
+            table.add_row("9", "Show Help", "Inline help")
+            table.add_row("q", "Exit", "Quit MelT")
+            self.console.print(table)
+            self.console.print()
+        return console.input("[bold yellow]Choose an option[/]: ").strip().lower()
+
+    def show_schedule_menu(self):
+        self.console.print("[bold cyan]Scheduled Downloads[/]")
+        t = Table(box=box.SIMPLE)
+        t.add_column("Option", style="yellow", width=6)
+        t.add_column("Action", style="green")
+        t.add_row("1", "List all jobs")
+        t.add_row("2", "Add a job")
+        t.add_row("3", "Remove a job")
+        t.add_row("4", "Start scheduler daemon")
+        t.add_row("b", "Back to main menu")
+        self.console.print(t)
+        return console.input("[bold yellow]Schedule option[/] (default: b): ").strip().lower() or 'b'
+
+    def show_rules_menu(self):
+        self.console.print("[bold cyan]Auto-Rules[/]")
+        t = Table(box=box.SIMPLE)
+        t.add_column("Option", style="yellow", width=6)
+        t.add_column("Action", style="green")
+        t.add_row("1", "List all rules")
+        t.add_row("2", "Add a rule")
+        t.add_row("3", "Remove a rule")
+        t.add_row("b", "Back to main menu")
+        self.console.print(t)
+        return console.input("[bold yellow]Rules option[/] (default: b): ").strip().lower() or 'b'
+
+    def show_sync_menu(self):
+        self.console.print("[bold cyan]Cloud Sync[/]")
+        t = Table(box=box.SIMPLE)
+        t.add_column("Option", style="yellow", width=6)
+        t.add_column("Action", style="green")
+        t.add_row("1", "Initialize sync repo")
+        t.add_row("2", "Push changes")
+        t.add_row("3", "Pull changes")
+        t.add_row("4", "Show status")
+        t.add_row("b", "Back to main menu")
+        self.console.print(t)
+        return console.input("[bold yellow]Sync option[/] (default: b): ").strip().lower() or 'b'
+
     def ask_continue(self):
-        return Prompt.ask(
-            "[bold yellow]Enter URLs to download more, or type 'exit' to quit[/]",
-            default=""
+        return console.input(
+            "[bold yellow]Enter URLs to download more, or type 'exit' to quit, or 'menu' for main menu[/]: "
         ).strip()

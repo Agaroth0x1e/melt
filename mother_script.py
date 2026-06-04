@@ -49,21 +49,67 @@ class MotherScript:
   [bold cyan]Inline Help[/]
 
   [bold]Basic usage:[/]
-    Paste one or more YouTube URLs (space-separated).
-    Use [bold]@file.txt[/] to load URLs from a text file.
+    Paste one or more YouTube URLs (space-separated) and press Enter.
+    Use [bold]@file.txt[/] to load URLs from a batch text file.
+    Type [bold]help[/] at any time to see this screen.
+
+  [bold]Format selection:[/]
+    [green]1[/]  Video (mp4) — downloads best video + audio, embeds thumbnails
+    [green]2[/]  Audio (m4a) — downloads best audio, embeds thumbnail + lyrics
+    [green]3[/]  Both — downloads video AND audio in parallel, auto-sorted to
+              downloads/videos/ and downloads/audio/
 
   [bold]During prompts:[/]
     [green]Enter[/]              Accept default / auto-confirm
-    [green]m[/]                  Modify options before starting
+    [green]m[/]                  Modify options before starting (format, dest, etc.)
     [green]q[/] / [green]exit[/] / [green]quit[/]  Exit at most prompts
 
   [bold]Session-persistent options:[/]
-    After first download, MelT remembers your settings
-    and offers to reuse them for the next batch.
+    After first download, MelT remembers your settings and offers
+    to reuse them for the next batch. Choose:
+      [green]Y[/]  Use same settings again
+      [green]n[/]  Start fresh with new prompts
+      [green]m[/]  Modify specific settings
+      [green]s[/]  Show current settings
+      [green]q[/]  Quit
+
+  [bold]Playlists:[/]
+    MelT auto-detects playlists and asks for a range (e.g. 1-5, 3,7-10)
+    or type "all" for the full playlist. Range is asked fresh each time.
+    Playlists create a subfolder using [bold]playlist_folder_template[/].
+    New videos since last download are shown as [green]+ N new[/].
+
+  [bold]Format preview:[/]
+    When [bold]format_preview: true[/] in config, MelT shows a table of
+    available formats before downloading. Pick a format ID to override
+    auto-selection, or press Enter to let yt-dlp decide.
+
+  [bold]Merge mode:[/]
+    When [bold]merge_mode: true[/] in config, video and audio streams are
+    downloaded separately then merged with MelT's own ffmpeg call.
+    Useful when yt-dlp's internal merge fails on certain videos.
+
+  [bold]Chapter splitter:[/]
+    When [bold]chapter_splitter.enabled: true[/], downloaded videos with
+    chapters are automatically split into per-chapter files after download.
+    Named as: "[Title] - [Chapter Name].mp4". Original file is kept.
+
+  [bold]Dry-run mode:[/]
+    When enabled, MelT inspects all URLs and shows what would be downloaded
+    without actually downloading anything. Useful for testing.
+
+  [bold]Keyboard shortcuts:[/]
+    Ctrl+C       Abort current download batch immediately
+    Enter        Confirm at prompts
+    m            Modify settings
+    q / quit     Quit
 
   [bold]Config:[/]
-    Edit [bold]config/config.json[/] for permanent defaults
-    (format, threads, timeout, numbering, etc.)
+    Edit [bold]config/config.json[/] for permanent defaults:
+      format, threads, timeout, numbering, duplicate action, sounds,
+      format_preview, merge_mode, chapter_splitter, cookies, rate_limit, etc.
+    Use [bold]python main.py --profile <name>[/] to load a saved profile.
+    Use [bold]python main.py profile save <name>[/] to save a profile.
 """
 
     def _save_queue(self, entries, fmt, threads, do_numbering, dup_action):
@@ -165,33 +211,11 @@ class MotherScript:
                 except Exception:
                     pass
 
-    def run(self, resume=False):
-        if not resume:
-            self.cli.show_banner()
-
+    def _run_download_flow(self):
         threads = self.config['general']['max_threads']
         do_numbering = self.config['general'].get('numbering', False)
         duplicate_action = self.config['general'].get('duplicate_action', 'skip')
-        dry_run = self.config['general'].get('dry_run', False)
-
-        if resume:
-            queue = self._load_queue()
-            if not queue:
-                self.cli.show_error("No resume queue found")
-                return
-            fmt = queue['fmt']
-            threads = queue.get('threads', threads)
-            do_numbering = queue.get('do_numbering', False)
-            duplicate_action = queue.get('duplicate_action', 'skip')
-            pending = [e for e in queue['entries'] if not e['done']]
-            done_count = sum(1 for e in queue['entries'] if e['done'])
-            self.cli.show_info(f"Resuming queue: {len(pending)} pending, {done_count} completed")
-            if not pending:
-                self.cli.show_info("All items already completed")
-                self._remove_queue()
-                return
-            self._execute_all(pending, fmt, threads, do_numbering, duplicate_action, resume=resume)
-            return
+        dry_run = False
 
         raw = ''
         while True:
@@ -200,6 +224,9 @@ class MotherScript:
                     raw = self.cli.ask_url()
                 raw = raw.strip()
                 if raw.lower() in ('exit', 'quit', 'q'):
+                    self.logger.info("User exited from URL prompt")
+                    return
+                if raw.lower().startswith('menu') or raw.lower() in ('back', 'b'):
                     return
                 if raw.lower() == 'help':
                     self.cli.console.print(self.HELP_URL_TEXT)
@@ -210,6 +237,7 @@ class MotherScript:
                 if not urls:
                     continue
 
+                self.logger.info(f"URLs entered: {urls[:5]}{'...' if len(urls) > 5 else ''} ({len(urls)} total)")
                 if len(urls) > 1:
                     self.cli.show_info(f"Loaded {len(urls)} URL(s)")
 
@@ -230,6 +258,7 @@ class MotherScript:
                     reuse = None
                     fmt = self.cli.ask_format()
                     dest = self.cli.ask_destination()
+                self.logger.info(f"Options: fmt={fmt}, dest={dest}, numbering={do_numbering}, dup={duplicate_action}, dry_run={dry_run}")
 
                 if dest == self.config['general']['downloads_dir'] and fmt != 'both':
                     dest = os.path.join(dest, 'videos' if fmt == 'video' else 'audio')
@@ -241,8 +270,13 @@ class MotherScript:
                     try:
                         url_infos.append((url, self.downloader.inspect_url(url)))
                     except Exception as e:
-                        self.cli.show_error(f"Skipping {url}: {e}")
+                        self.cli.show_warning(f"Invalid URL: {url}")
                         self.logger.error(f"Failed to inspect {url}: {e}")
+
+                if not url_infos:
+                    self.cli.show_warning("No valid URLs provided")
+                    raw = ''
+                    continue
 
                 from utils.rules import RuleManager
                 rule_mgr = RuleManager(self.config, self.logger)
@@ -314,6 +348,7 @@ class MotherScript:
                     action = self.cli.show_start_prompt(timeout, force_modify=_force_modify)
                     _force_modify = False
                     if action in ('start', ''):
+                        self.logger.info("User started download")
                         break
                     if action.lower() == 'm':
                         mod_key = self.cli.ask_modify_option(options)
@@ -324,6 +359,7 @@ class MotherScript:
                             break
                         new_val = self._modify_option(mod_key, fmt, dest, do_numbering, duplicate_action, dry_run)
                         if new_val is not None:
+                            self.logger.info(f"Modify: {mod_key} -> {new_val}")
                             if mod_key == 'Format':
                                 fmt = new_val
                             elif mod_key == 'Destination':
@@ -349,6 +385,7 @@ class MotherScript:
                         fmts = self.downloader.fetch_formats(u)
                         if fmts:
                             chosen = self.cli.show_format_preview(all_entries[0].get('title', u), fmts)
+                            self.logger.info(f"Format preview: user selected format ID {chosen}" if chosen else "Format preview: user skipped selection")
                             if chosen:
                                 for e in all_entries:
                                     e['chosen_format'] = chosen
@@ -363,9 +400,370 @@ class MotherScript:
                 break
 
             answer = self.cli.ask_continue()
+            self.logger.info(f"Continue choice: {answer}")
             if answer.lower() in ('exit', 'quit', 'q'):
                 break
+            if answer.lower().startswith('menu') or answer.lower() in ('back', 'b'):
+                return
             raw = answer
+
+    def run(self, resume=False):
+        if not resume:
+            self.cli.show_banner()
+
+        if resume:
+            queue = self._load_queue()
+            if not queue:
+                self.cli.show_error("No resume queue found")
+                return
+            fmt = queue['fmt']
+            threads = queue.get('threads', self.config['general']['max_threads'])
+            do_numbering = queue.get('do_numbering', False)
+            duplicate_action = queue.get('duplicate_action', 'skip')
+            pending = [e for e in queue['entries'] if not e['done']]
+            done_count = sum(1 for e in queue['entries'] if e['done'])
+            self.cli.show_info(f"Resuming queue: {len(pending)} pending, {done_count} completed")
+            if not pending:
+                self.cli.show_info("All items already completed")
+                self._remove_queue()
+                return
+            self._execute_all(pending, fmt, threads, do_numbering, duplicate_action, resume=resume)
+            return
+
+        first = True
+        while True:
+            choice = self.cli.show_main_menu(show_table=first)
+            first = False
+            self.logger.info(f"Menu choice: {choice}")
+
+            if choice == '1':
+                self._run_download_flow()
+                continue
+
+            elif choice == '2':
+                query = self.cli.console.input("[bold yellow]Search YouTube:[/] ").strip()
+                if not query:
+                    continue
+                self.logger.info(f"Search query: {query}")
+                self._run_search(query)
+                continue
+
+            elif choice in ('3', 'analytics'):
+                self.logger.info("Viewing analytics")
+                self._run_analytics()
+                continue
+
+            elif choice in ('4', 'dashboard'):
+                self.logger.info("Opening dashboard")
+                self._run_dashboard()
+                continue
+
+            elif choice == '5':
+                self.logger.info("Schedule menu")
+                self._run_schedule_menu()
+                continue
+
+            elif choice == '6':
+                self.logger.info("Rules menu")
+                self._run_rules_menu()
+                continue
+
+            elif choice == '7':
+                self.logger.info("Starting watch folder")
+                self._run_watch()
+                continue
+
+            elif choice == '8':
+                self.logger.info("Sync menu")
+                self._run_sync_menu()
+                continue
+
+            elif choice in ('9', 'help'):
+                self.logger.info("Viewed inline help")
+                self.cli.console.print(self.HELP_URL_TEXT)
+                continue
+
+            elif choice in ('q', 'quit', 'exit', '0'):
+                self.logger.info("User exited")
+                self.cli.show_info("Goodbye!")
+                break
+
+    @staticmethod
+    def _rel_date(ud):
+        if not ud:
+            return ''
+        try:
+            if isinstance(ud, (int, float)):
+                d = datetime.fromtimestamp(ud)
+            else:
+                d = datetime.strptime(str(ud), '%Y%m%d')
+            diff = datetime.now() - d
+            days = diff.days
+            if days < 1:
+                return 'today'
+            if days == 1:
+                return 'yesterday'
+            if days < 7:
+                return f'{days}d ago'
+            if days < 30:
+                return f'{days // 7}w ago'
+            if days < 365:
+                return f'{days // 30}mo ago'
+            return f'{days // 365}y ago'
+        except Exception:
+            return ''
+
+    def _run_search(self, query):
+        import yt_dlp
+        self.cli.show_info(f"Searching for: {query}")
+
+        sc = self.config.get('search', {})
+        filter_type = sc.get('filter_type', 'all')
+        default_sort = sc.get('default_sort', 'relevance')
+
+        def _is_playlist_entry(e):
+            ie = e.get('ie_key', '')
+            url = e.get('url', '')
+            return ie == 'YoutubePlaylist' or 'playlist?list=' in url or '/playlist?' in url
+
+        search_flat = self.config.get('general', {}).get('extract_flat', {}).get('search', False)
+        total_wanted = 30
+        while True:
+            try:
+                with yt_dlp.YoutubeDL({'quiet': True, 'no_warnings': True, 'extract_flat': search_flat}) as ydl:
+                    results = ydl.extract_info(f"ytsearch{total_wanted}:{query}", download=False)
+            except Exception as e:
+                self.cli.show_error(f"Search failed: {e}")
+                return
+            entries = results.get('entries', [])
+            if not entries:
+                self.cli.show_warning("No results found")
+                return
+
+            if filter_type == 'video':
+                entries = [e for e in entries if not _is_playlist_entry(e)]
+            elif filter_type == 'playlist':
+                entries = [e for e in entries if _is_playlist_entry(e)]
+
+            if default_sort == 'views':
+                entries.sort(key=lambda e: e.get('view_count', 0) or 0, reverse=True)
+            elif default_sort == 'date':
+                entries.sort(key=lambda e: e.get('upload_date', '') or '', reverse=True)
+            elif default_sort == 'duration':
+                entries.sort(key=lambda e: e.get('duration', 0) or 0, reverse=True)
+
+            if not entries:
+                self.cli.show_warning("No matching results")
+                return
+
+            from rich.table import Table
+            table = Table(title=f"Search results: {query}", box=None)
+            table.add_column("#", style="dim", width=4)
+            table.add_column("Type", width=4)
+            table.add_column("Title", ratio=3)
+            table.add_column("Channel", ratio=2)
+            table.add_column("Date", width=10)
+            table.add_column("Duration", width=6)
+            table.add_column("Views", width=8)
+            for i, e in enumerate(entries, 1):
+                etype = '[P]' if _is_playlist_entry(e) else '[V]'
+                dur = int(e.get('duration', 0) or 0)
+                dur_str = f"{dur // 60}:{dur % 60:02d}" if dur else '?'
+                views = e.get('view_count', 0) or 0
+                views_str = f"{views:,}" if views else '?'
+                rdate = self._rel_date(e.get('upload_date', ''))
+                table.add_row(str(i), etype, e.get('title', '?')[:55], e.get('uploader', '?')[:22], rdate, dur_str, views_str)
+            self.cli.console.print(table)
+
+            choice = self.cli.console.input(f"\n[bold yellow]Enter numbers to download[/] [dim](e.g. 1,3,5-8)[/], [bold]'all'[/] for all, [bold]'more'[/] for next {total_wanted}, or [bold]Enter[/] to cancel: ").strip().lower()
+            if not choice:
+                return
+            if choice == 'more':
+                total_wanted += 30
+                continue
+
+            selected_urls = []
+            if choice == 'all':
+                selected_urls = [e['url'] if e.get('url') else f"https://www.youtube.com/watch?v={e['id']}" for e in entries if e]
+            else:
+                parts = choice.replace(',', ' ').split()
+                for part in parts:
+                    if '-' in part:
+                        try:
+                            a, b = part.split('-')
+                            for idx in range(int(a), int(b) + 1):
+                                if 1 <= idx <= len(entries):
+                                    e = entries[idx - 1]
+                                    selected_urls.append(e['url'] if e.get('url') else f"https://www.youtube.com/watch?v={e['id']}")
+                        except ValueError:
+                            pass
+                    else:
+                        try:
+                            idx = int(part)
+                            if 1 <= idx <= len(entries):
+                                e = entries[idx - 1]
+                                selected_urls.append(e['url'] if e.get('url') else f"https://www.youtube.com/watch?v={e['id']}")
+                        except ValueError:
+                            pass
+            if not selected_urls:
+                self.cli.show_warning("No valid selections")
+                return
+            self.logger.info(f"Search selected {len(selected_urls)} result(s): {selected_urls[:3]}...")
+            self.cli.show_info(f"Selected {len(selected_urls)} result(s)")
+            self.batch_download(' '.join(selected_urls), self.config['general']['default_format'],
+                                self.config['general']['downloads_dir'])
+            return
+
+    def _run_analytics(self):
+        from utils.stats import show_analytics
+        show_analytics(self.config.resolve_path(os.path.join('logs', 'stats.json')))
+        input("\nPress Enter to return to menu...")
+
+    def _run_dashboard(self):
+        from utils.tui import run_dashboard
+        run_dashboard(self.config, self.logger)
+
+    def _run_schedule_menu(self):
+        from utils.scheduler import Scheduler
+        sch = Scheduler(self.config, self.logger)
+        while True:
+            s_choice = self.cli.show_schedule_menu()
+            self.logger.info(f"Schedule menu choice: {s_choice}")
+            if s_choice == '1':
+                jobs = sch.list()
+                if not jobs:
+                    self.cli.show_info("No scheduled jobs")
+                else:
+                    for j in jobs:
+                        enabled = 'enabled' if j.get('enabled', True) else 'disabled'
+                        next_dt = j.get('next_run', 'never')
+                        last_dt = j.get('last_run', 'never')
+                        self.cli.console.print(f"  [{j['id']}] {enabled} | {j['url'][:60]} | next: {next_dt}")
+                input("\nPress Enter...")
+            elif s_choice == '2':
+                url = input("URL: ").strip()
+                if not url:
+                    continue
+                interval = input("Interval in hours (0 for one-time): ").strip()
+                interval = int(interval) if interval.isdigit() else 0
+                fmt = input("Format (video/audio/both) [default: video]: ").strip() or 'video'
+                dest = input("Destination [default: downloads]: ").strip() or 'downloads'
+                jid = sch.add(url, interval, '', fmt, dest)
+                self.logger.info(f"Schedule job added: {jid} -> {url[:60]}, every {interval}h, fmt={fmt}")
+                self.cli.show_info(f"Scheduled job {jid} added")
+            elif s_choice == '3':
+                jid = input("Job ID to remove: ").strip()
+                if sch.remove(jid):
+                    self.logger.info(f"Schedule job removed: {jid}")
+                    self.cli.show_info(f"Removed job {jid}")
+                else:
+                    self.cli.show_error(f"Job {jid} not found")
+            elif s_choice == '4':
+                self.logger.info("Starting scheduler daemon")
+                self.cli.show_info("Starting scheduler daemon (Ctrl+C to stop)...")
+                try:
+                    while True:
+                        due = sch.due_jobs()
+                        for job in due:
+                            self.cli.show_info(f"Running scheduled job {job['id']}: {job['url'][:50]}")
+                            self.batch_download(job['url'], job.get('fmt', 'video'), job.get('dest', 'downloads'))
+                            sch.mark_run(job['id'])
+                        import time as t
+                        t.sleep(60)
+                except KeyboardInterrupt:
+                    self.logger.info("Scheduler daemon stopped")
+            elif s_choice in ('b', 'back', 'q', 'quit'):
+                break
+
+    def _run_rules_menu(self):
+        from utils.rules import RuleManager
+        rm = RuleManager(self.config, self.logger)
+        while True:
+            r_choice = self.cli.show_rules_menu()
+            self.logger.info(f"Rules menu choice: {r_choice}")
+            if r_choice == '1':
+                rules = rm.list()
+                if not rules:
+                    self.cli.show_info("No rules defined")
+                else:
+                    for r in rules:
+                        m = r.get('match', {})
+                        a = r.get('action', {})
+                        desc = []
+                        if m.get('channel'): desc.append(f"channel={m['channel']}")
+                        if m.get('keyword'): desc.append(f"keyword={m['keyword']}")
+                        if m.get('url_pattern'): desc.append(f"url={m['url_pattern']}")
+                        a_desc = []
+                        if a.get('fmt'): a_desc.append(f"fmt={a['fmt']}")
+                        if a.get('dest'): a_desc.append(f"dest={a['dest']}")
+                        self.cli.console.print(f"  [{r['id']}] {', '.join(desc)} -> {', '.join(a_desc)}")
+                input("\nPress Enter...")
+            elif r_choice == '2':
+                match = {}
+                action = {}
+                kw = input("Keyword to match (or Enter to skip): ").strip()
+                if kw: match['keyword'] = kw
+                ch = input("Channel name to match (or Enter to skip): ").strip()
+                if ch: match['channel'] = ch
+                urlp = input("URL pattern to match (or Enter to skip): ").strip()
+                if urlp: match['url_pattern'] = urlp
+                if not match:
+                    self.cli.show_warning("At least one match criteria required")
+                    continue
+                fmt = input("Format to apply (video/audio/both) [Enter to skip]: ").strip()
+                if fmt: action['fmt'] = fmt
+                dest = input("Destination to apply [Enter to skip]: ").strip()
+                if dest: action['dest'] = dest
+                rid = rm.add(match, action)
+                self.logger.info(f"Rule added: {rid} -> match={match}, action={action}")
+                self.cli.show_info(f"Rule {rid} added")
+            elif r_choice == '3':
+                rid = input("Rule ID to remove: ").strip()
+                if rm.remove(rid):
+                    self.logger.info(f"Rule removed: {rid}")
+                    self.cli.show_info(f"Rule {rid} removed")
+                else:
+                    self.cli.show_error(f"Rule {rid} not found")
+            elif r_choice in ('b', 'back', 'q', 'quit'):
+                break
+
+    def _run_watch(self):
+        from utils.watcher import FolderWatcher
+        w = FolderWatcher(self.config, self.logger, lambda: self)
+        w.run()
+
+    def _run_sync_menu(self):
+        from utils.sync import SyncManager
+        sm = SyncManager(self.config, self.logger)
+        while True:
+            sy_choice = self.cli.show_sync_menu()
+            self.logger.info(f"Sync menu choice: {sy_choice}")
+            if sy_choice == '1':
+                remote = input("Remote URL (or Enter for local only): ").strip()
+                result = sm.init(remote)
+                self.logger.info(f"Sync init: {result}")
+                self.cli.console.print(result)
+                input("\nPress Enter...")
+            elif sy_choice == '2':
+                msg = input("Commit message [Enter for auto]: ").strip()
+                result = sm.push(msg)
+                self.logger.info(f"Sync push: {result}")
+                self.cli.console.print(result)
+                input("\nPress Enter...")
+            elif sy_choice == '3':
+                result = sm.pull()
+                self.logger.info(f"Sync pull: {result}")
+                self.cli.console.print(result)
+                input("\nPress Enter...")
+            elif sy_choice == '4':
+                st = sm.status()
+                rs = sm.remote_status()
+                self.cli.console.print(st)
+                self.cli.console.print()
+                self.cli.console.print(rs)
+                input("\nPress Enter...")
+            elif sy_choice in ('b', 'back', 'q', 'quit'):
+                break
 
     def batch_download(self, url, fmt, dest):
         threads = self.config['general']['max_threads']
