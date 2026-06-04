@@ -7,6 +7,27 @@ class Remuxer:
     def __init__(self, logger):
         self.logger = logger
 
+    def _ffprobe_binary(self):
+        path = os.environ.get('FFMPEG_PATH', '')
+        if path:
+            return os.path.join(os.path.dirname(path), 'ffprobe') + ('.exe' if os.name == 'nt' else '')
+        return 'ffprobe' + ('.exe' if os.name == 'nt' else '')
+
+    def _run_ffprobe(self, args):
+        binary = self._ffprobe_binary()
+        try:
+            result = subprocess.run([binary] + args, capture_output=True, text=True, timeout=60)
+            return result.stdout
+        except FileNotFoundError:
+            self.logger.error("ffprobe not found")
+            return ''
+        except subprocess.TimeoutExpired:
+            self.logger.error("ffprobe timed out")
+            return ''
+        except Exception as e:
+            self.logger.error(f"ffprobe error: {e}")
+            return ''
+
     def _ffmpeg_binary(self):
         return os.environ.get('FFMPEG_PATH', 'ffmpeg')
 
@@ -80,6 +101,58 @@ class Remuxer:
             self.logger.info("Embedded lyrics metadata into audio")
         except Exception as e:
             self.logger.warn(f"Failed to embed lyrics metadata: {e}")
+
+    def get_chapters(self, video_path):
+        probe = self._run_ffprobe(['-v', 'quiet', '-print_format', 'json', '-show_chapters', video_path])
+        if not probe:
+            return []
+        import json
+        data = json.loads(probe)
+        return data.get('chapters', [])
+
+    def split_by_chapters(self, video_path, output_dir, title, ext='mp4'):
+        chapters = self.get_chapters(video_path)
+        if not chapters:
+            self.logger.info("No chapters found")
+            return []
+
+        os.makedirs(output_dir, exist_ok=True)
+        results = []
+        base = self._sanitize(title)
+
+        for i, ch in enumerate(chapters):
+            start = float(ch['start_time'])
+            end = float(ch['end_time'])
+            ch_title = ch.get('tags', {}).get('title', f'Chapter {i+1}')
+            safe_title = self._sanitize(ch_title)
+            output = os.path.join(output_dir, f"{base} - {safe_title}.{ext}")
+
+            self._run_ffmpeg([
+                '-i', video_path,
+                '-ss', str(start),
+                '-to', str(end),
+                '-c', 'copy',
+                output,
+            ])
+            results.append(output)
+
+        return results
+
+    @staticmethod
+    def _sanitize(name):
+        return re.sub(r'[<>:"/\\|?*]', '_', name).strip()
+
+    def merge_video_audio(self, video_path, audio_path, output_path):
+        self.logger.info(f"Merging video: {video_path} + audio: {audio_path}")
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        self._run_ffmpeg([
+            '-i', video_path,
+            '-i', audio_path,
+            '-c:v', 'copy',
+            '-c:a', 'copy',
+            output_path,
+        ])
+        return output_path
 
     def embed_subtitles_into_audio(self, audio_path, subtitle_path, output_path):
         if not subtitle_path or not os.path.exists(subtitle_path):

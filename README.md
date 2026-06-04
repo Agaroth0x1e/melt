@@ -27,6 +27,31 @@ See [BUILD.md#termux-android](BUILD.md#termux-android) for full setup guide.
 
 Pre-built binaries bundle ffmpeg. Source mode requires ffmpeg in PATH (`scoop install ffmpeg` / `brew install ffmpeg` / `sudo apt install ffmpeg`).
 
+## Inline Help
+
+Type `help` at the URL prompt for detailed guidance on usage, shortcuts, and session-persistent options.
+
+## Session-Persistent Options
+
+After your first download, MelT remembers your settings (format, destination, numbering, duplicate action, dry run) and asks if you want to reuse them for the next batch:
+
+```
+Previous session settings:
+  Format:        Audio
+  Destination:   downloads\audio
+  Numbering:     No
+  On Duplicate:  skip
+  Dry Run:       No
+Reuse these settings? (Y=yes / n=no / s=show again / q=quit) (default: yes):
+```
+
+- **Enter/Y** — reuse the same settings
+- **n** — choose new settings
+- **s** — show the summary again
+- **q** — quit
+
+Settings reset to defaults when you close and reopen MelT. Playlist ranges are always prompted fresh (each playlist is different).
+
 ## Features
 
 - Single video & playlist downloads
@@ -40,6 +65,7 @@ Pre-built binaries bundle ffmpeg. Source mode requires ffmpeg in PATH (`scoop in
 - Dry-run mode to preview before downloading
 - Download queue persistence (resume crashes with `--resume`)
 - Rate limiting, cookies file support, archive dedup
+- Session-persistent options (reuse settings between batches)
 - Standalone .exe with bundled ffmpeg
 
 ## Usage
@@ -50,6 +76,12 @@ python main.py --resume           # Resume interrupted queue
 python main.py --help             # Show help
 python main.py --version          # Show version
 ```
+
+### Session Behavior
+
+- Settings are remembered within a session (app open → app close).
+- Close and reopen MelT to reset to config defaults.
+- Playlist ranges are always prompted per playlist — never reused.
 
 ### Multi-URL
 
@@ -84,11 +116,12 @@ Edit `config/config.json`:
 | `sponsorblock` | `true` | Skip sponsored segments |
 | `dry_run` | `false` | Preview without downloading |
 | `exit_on_complete` | `false` | Exit after download (false = loop back) |
+| `default_reuse` | `true` | Default to reuse previous settings (false = always prompt fresh) |
 | `reverse_playlist` | `false` | Process newest-first |
 | `rate_limit` | `""` | e.g. `"5M"`, empty = unlimited |
 | `cookies_file` | `""` | Path to cookies.txt |
 | `playlist_folder_template` | `"%(playlist_title)s"` | Subfolder naming for playlists |
-| `timeout_seconds` | `5` | Seconds before auto-confirm prompts |
+| `timeout_seconds` | `5` | Seconds before auto-confirm prompts (`-1` = no timeout) |
 | `video.preferred_format` | `"mp4"` | `"mp4"`, `"mkv"`, or `"webm"` |
 | `video.quality_priority` | `["480","360","720"]` | Preferred resolutions |
 | `video.preferred_codec` | `"h264"` | `"h264"`, `"h265"`, or `"vp9"` |

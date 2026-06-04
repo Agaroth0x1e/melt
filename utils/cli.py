@@ -16,6 +16,10 @@ def timed_prompt(prompt_text, timeout, default):
     console.print(prompt_text, end="")
     sys.stdout.flush()
 
+    if timeout < 0:
+        line = input()
+        return line.strip() if line.strip() else default
+
     _any_key = False
     start = time_module.time()
     while time_module.time() - start < timeout:
@@ -35,9 +39,8 @@ def timed_prompt(prompt_text, timeout, default):
         console.print()
         return default
 
-    console.print()
-    line = sys.stdin.readline().strip()
-    return line if line else default
+    line = input()
+    return line.strip() if line.strip() else default
 
 
 class CLI:
@@ -56,15 +59,41 @@ class CLI:
         self.console.print()
 
     def ask_url(self):
-        return Prompt.ask("[bold yellow]Enter YouTube URL[/]").strip()
+        return Prompt.ask("[bold yellow]Enter YouTube URL[/] (or type 'help' for info)").strip()
+
+    def ask_reuse_settings(self, prev):
+        self.console.print("\n[bold]Previous session settings:[/]")
+        fmt_label = {'video': 'Video', 'audio': 'Audio', 'both': 'Both (Video + Audio)'}.get(prev.get('fmt'), 'Video')
+        self.console.print(f"  [cyan]Format:[/]        {fmt_label}")
+        self.console.print(f"  [cyan]Destination:[/]   {prev.get('dest', '?')}")
+        self.console.print(f"  [cyan]Numbering:[/]     {'Yes' if prev.get('numbering') else 'No'}")
+        self.console.print(f"  [cyan]On Duplicate:[/]  {prev.get('duplicate_action', 'skip')}")
+        self.console.print(f"  [cyan]Dry Run:[/]       {'Yes' if prev.get('dry_run') else 'No'}")
+        timeout = self.config['general']['timeout_seconds']
+        default_reuse = self.config['general'].get('default_reuse', True)
+        default_ans = 'yes' if default_reuse else 'no'
+        result = timed_prompt(
+            f"[bold yellow]Reuse these settings?[/] (Y=yes / n=no / m=modify / s=show again / q=quit) [bold](default: {'yes' if default_reuse else 'no'})[/]: ",
+            timeout, default_ans
+        ).strip().lower()
+        if result in ('q', 'quit', 'exit'):
+            return 'exit'
+        if result in ('n', 'no'):
+            return 'no'
+        if result in ('s', 'show'):
+            return self.ask_reuse_settings(prev)
+        if result in ('m', 'modify'):
+            return 'modify'
+        return 'yes'
 
     def ask_format(self):
         timeout = self.config['general']['timeout_seconds']
         default = self.config['general']['default_format']
-        mapping = {'1': 'video', '2': 'audio'}
+        mapping = {'1': 'video', '2': 'audio', '3': 'both'}
+        def_key = {'video': '1', 'audio': '2', 'both': '3'}.get(default, '1')
         result = timed_prompt(
-            f"[bold yellow]Download format[/] (1: video, 2: audio) [bold](default: {default})[/]: ",
-            timeout, '1' if default == 'video' else '2'
+            f"[bold yellow]Download format[/] (1: video, 2: audio, 3: both) [bold](default: {default})[/]: ",
+            timeout, def_key
         )
         return mapping.get(result.strip(), default)
 
@@ -107,7 +136,26 @@ class CLI:
         self.console.print(table)
         self.console.print()
 
-    def show_start_prompt(self, timeout):
+    def show_format_preview(self, title, formats):
+        self.console.print(f"\n[bold]Available formats for:[/] {title[:60]}")
+        table = Table(box=box.SIMPLE)
+        table.add_column("ID", style="cyan", width=6)
+        table.add_column("Ext", width=5)
+        table.add_column("Type", width=6)
+        table.add_column("Quality", width=10)
+        table.add_column("Codec", width=8)
+        table.add_column("Size", width=10)
+        for fmt_id, ext, typ, quality, codec, size in formats:
+            size_str = f"{size / 1048576:.1f} MB" if size else "~"
+            table.add_row(fmt_id, ext, typ, quality, codec, size_str)
+        self.console.print(table)
+        choice = Prompt.ask("[bold yellow]Enter format ID to use[/] (or press Enter for auto)", default="")
+        return choice.strip() if choice.strip() else None
+
+    def show_start_prompt(self, timeout, force_modify=False):
+        if force_modify:
+            self.console.print("[cyan]Modify mode — change any option before starting[/]")
+            return 'm'
         result = timed_prompt(
             f"[bold yellow]Press Enter to start[/] (auto-starts in {timeout}s) [bold]or type 'm' to modify options, Ctrl+C to abort[/]: ",
             timeout, 'start'
@@ -141,7 +189,7 @@ class CLI:
     def show_info(self, message):
         self.console.print(f"[blue]INFO[/] {message}")
 
-    def show_completion(self, success_count, fail_count, dest, log_path, failed_path, sub_fail_count=0, elapsed=0):
+    def show_completion(self, success_count, fail_count, dest, log_path, failed_path, sub_fail_count=0, elapsed=0, skip_count=0, skipped_path=None):
         self.console.print()
         elapsed_str = ""
         if elapsed:
@@ -157,17 +205,24 @@ class CLI:
             f"[green]Successfully processed: {success_count}[/]\n"
             f"[red]Failed: {fail_count}[/]"
         )
+        if skip_count > 0:
+            body += f"\n[yellow]Skipped (already exists): {skip_count}[/]"
         if sub_fail_count > 0:
             body += f"\n[yellow]Subtitle failures: {sub_fail_count} (videos still downloaded)[/]"
         body += f"\n[bold]Delivered to:[/] {dest}"
         if elapsed_str:
             body += f"\n{elapsed_str}"
+        show_extra = False
+        extra_parts = []
         if fail_count > 0 or sub_fail_count > 0:
-            body += (
-                f"\n\n[yellow]Some operations had issues.[/]\n"
-                f"Check [bold]{log_path}[/] for details\n"
-                f"Check [bold]{failed_path}[/] for failure records"
-            )
+            show_extra = True
+            extra_parts.append(f"Check [bold]{log_path}[/] for details")
+            extra_parts.append(f"Check [bold]{failed_path}[/] for failure records")
+        if skip_count > 0 and skipped_path:
+            show_extra = True
+            extra_parts.append(f"Check [bold]{skipped_path}[/] for skipped/duplicate records")
+        if show_extra:
+            body += f"\n\n[yellow]Some operations had issues.[/]\n" + "\n".join(extra_parts)
         panel = Panel(
             body,
             title="[bold]Done[/]",

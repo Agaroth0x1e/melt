@@ -10,8 +10,11 @@ def _sounds_dir():
     return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'sounds')
 
 
-def play_sound(name, block=False):
-    path = os.path.join(_sounds_dir(), f'{name}.wav')
+def play_sound(name, block=False, config=None):
+    custom = None
+    if config and 'sounds' in config.config:
+        custom = config['sounds'].get(name, '')
+    path = custom if custom else os.path.join(_sounds_dir(), f'{name}.wav')
     if not os.path.exists(path):
         return
 
@@ -65,15 +68,15 @@ def _notify_termux(title, message, sound_name=None):
     return False
 
 
-def notify(title, message, sound_name=None):
+def notify(title, message, sound_name=None, config=None):
     if sound_name:
-        play_sound(sound_name)
+        play_sound(sound_name, config=config)
 
     if _notify_termux(title, message, sound_name):
         return
     _notify_desktop(title, message)
 
 
-def notify_async(title, message, sound_name=None):
-    t = threading.Thread(target=notify, args=(title, message, sound_name), daemon=True)
+def notify_async(title, message, sound_name=None, config=None):
+    t = threading.Thread(target=notify, args=(title, message, sound_name, config), daemon=True)
     t.start()

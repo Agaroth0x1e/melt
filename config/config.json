@@ -2,9 +2,10 @@
   "general": {
     "temp_dir": "temp",
     "downloads_dir": "downloads",
-    "archive_file": "archive/archive.txt",
-    "log_file": "log/log.txt",
-    "failed_file": "failed/failed.txt",
+    "archive_file": "logs/archive.txt",
+    "log_file": "logs/log.txt",
+    "failed_file": "logs/failed.txt",
+    "skipped_file": "logs/skipped.txt",
     "clear_temp": true,
     "default_format": "video",
     "max_threads": 3,
@@ -19,7 +20,10 @@
     "exit_on_complete": false,
     "sponsorblock": true,
     "reverse_playlist": false,
-    "enable_sounds": true
+    "enable_sounds": true,
+    "default_reuse": true,
+    "format_preview": false,
+    "merge_mode": false
   },
   "video": {
     "preferred_format": "mp4",
@@ -35,5 +39,23 @@
     "prefer_human": true,
     "language": "en",
     "preferred_format": "srt"
+  },
+    "watch_folder": {
+        "enabled": false,
+        "path": "watch",
+        "interval_seconds": 60,
+        "auto_delete": true
+    },
+    "chapter_splitter": {
+        "enabled": false,
+        "output_template": "%(title)s - %(chapter)s.%(ext)s"
+    },
+    "sounds": {
+    "batch_start": "",
+    "analyze_complete": "",
+    "download_error": "",
+    "aborting": "",
+    "fatal_error": "",
+    "completion": ""
   }
 }

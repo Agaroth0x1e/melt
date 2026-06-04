@@ -57,9 +57,10 @@ class Config:
             "general": {
                 "temp_dir": "temp",
                 "downloads_dir": "downloads",
-                "archive_file": "archive/archive.txt",
-                "log_file": "log/log.txt",
-                "failed_file": "failed/failed.txt",
+                "archive_file": "logs/archive.txt",
+                "log_file": "logs/log.txt",
+                "failed_file": "logs/failed.txt",
+                "skipped_file": "logs/skipped.txt",
                 "clear_temp": True,
                 "default_format": "video",
                 "max_threads": 10,
@@ -74,7 +75,10 @@ class Config:
                 "exit_on_complete": False,
                 "sponsorblock": True,
                 "reverse_playlist": False,
-                "enable_sounds": True
+                "enable_sounds": True,
+                "default_reuse": True,
+                "format_preview": False,
+                "merge_mode": False
             },
             "video": {
                 "preferred_format": "mp4",
@@ -90,6 +94,24 @@ class Config:
                 "prefer_human": True,
                 "language": "en",
                 "preferred_format": "srt"
+            },
+            "watch_folder": {
+                "enabled": False,
+                "path": "watch",
+                "interval_seconds": 60,
+                "auto_delete": True,
+            },
+            "chapter_splitter": {
+                "enabled": False,
+                "output_template": "%(title)s - %(chapter)s.%(ext)s"
+            },
+            "sounds": {
+                "batch_start": "",
+                "analyze_complete": "",
+                "download_error": "",
+                "aborting": "",
+                "fatal_error": "",
+                "completion": ""
             }
         }
 
@@ -98,8 +120,8 @@ class Config:
         g = self.config.get("general", {})
         if not isinstance(g.get("max_threads"), int) or g["max_threads"] < 1:
             errors.append("general.max_threads must be a positive integer")
-        if not isinstance(g.get("timeout_seconds"), int) or g["timeout_seconds"] < 1:
-            errors.append("general.timeout_seconds must be a positive integer")
+        if not isinstance(g.get("timeout_seconds"), int) or g["timeout_seconds"] < -1 or g["timeout_seconds"] == 0:
+            errors.append("general.timeout_seconds must be a positive integer, or -1 for no timeout")
         if g.get("default_format") not in ("video", "audio"):
             errors.append("general.default_format must be 'video' or 'audio'")
         if g.get("duplicate_action") not in ("skip", "overwrite", "keep"):
@@ -118,6 +140,12 @@ class Config:
             errors.append("general.exit_on_complete must be true/false")
         if not isinstance(g.get("enable_sounds", True), bool):
             errors.append("general.enable_sounds must be true/false")
+        if not isinstance(g.get("default_reuse", True), bool):
+            errors.append("general.default_reuse must be true/false")
+        if not isinstance(g.get("format_preview", False), bool):
+            errors.append("general.format_preview must be true/false")
+        if not isinstance(g.get("merge_mode", False), bool):
+            errors.append("general.merge_mode must be true/false")
         v = self.config.get("video", {})
         if v.get("preferred_format") not in ("mp4", "mkv", "webm"):
             errors.append("video.preferred_format must be 'mp4', 'mkv', or 'webm'")

@@ -14,8 +14,9 @@ def mother(mocker):
     logger = mocker.MagicMock()
     archive = mocker.MagicMock()
     failed = mocker.MagicMock()
+    skipped = mocker.MagicMock()
     cli = mocker.MagicMock()
-    return MotherScript(config, logger, archive, failed, cli)
+    return MotherScript(config, logger, archive, failed, skipped, cli)
 
 
 class TestSanitize:

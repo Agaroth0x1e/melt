@@ -2,6 +2,7 @@ import os
 import sys
 import urllib.parse
 import yt_dlp
+from components.remuxer import Remuxer
 
 class YtdlpLogger:
     def debug(self, msg): pass
@@ -169,7 +170,45 @@ class Downloader:
             'playlist_id': None,
         }
 
-    def _video_format_string(self):
+    def fetch_formats(self, url):
+        opts = {'quiet': True, 'no_warnings': True, 'skip_download': True}
+        opts.update(self._cookies_opts())
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+        raw = info.get('formats', [])
+        rows = []
+        for f in raw:
+            if f.get('vcodec') == 'none' and f.get('acodec') == 'none':
+                continue
+            fmt_id = f.get('format_id', '?')
+            ext = f.get('ext', '?')
+            note = f.get('format_note', '')
+            vcodec = f.get('vcodec', 'none')
+            acodec = f.get('acodec', 'none')
+            height = f.get('height', 0) or 0
+            abr = f.get('abr', 0) or 0
+            size = f.get('filesize') or f.get('filesize_approx', 0) or 0
+            is_video = vcodec != 'none'
+            is_audio = acodec != 'none' and vcodec == 'none'
+            if is_video:
+                label = f"{height}p"
+                if note:
+                    label = note
+                codec = vcodec.split('.')[0][:6]
+                row = (fmt_id, ext, 'video', label, codec, size)
+            elif is_audio:
+                codec = acodec.split('.')[0][:6]
+                row = (fmt_id, ext, 'audio', f"{int(abr)}k", codec, size)
+            else:
+                continue
+            rows.append(row)
+        def _qual_val(q):
+            q = q.rstrip('pk')
+            return int(q) if q.isdigit() else 0
+        rows.sort(key=lambda r: (r[2], -_qual_val(r[3])))
+        return rows
+
+    def _video_only_format_string(self):
         ext = self.config['video']['preferred_format']
         codec = self.config['video'].get('preferred_codec', 'h264')
         vcodec = {'h264': 'avc1', 'h265': 'hevc', 'vp9': 'vp9'}.get(codec, 'avc1')
@@ -177,11 +216,38 @@ class Downloader:
 
         formats = []
         for q in priorities:
-            formats.append(f"bestvideo[ext={ext}][vcodec^={vcodec}][height<={q}]+bestaudio[ext=m4a]")
-        formats.append(f"bestvideo[ext={ext}][vcodec^={vcodec}][height<=1080][height>360]+bestaudio[ext=m4a]")
-        formats.append(f"bestvideo[ext={ext}]+bestaudio[ext=m4a]")
+            formats.append(f"bestvideo[ext={ext}][vcodec^={vcodec}][height<={q}]")
+        formats.append(f"bestvideo[ext={ext}][vcodec^={vcodec}][height<=1080][height>360]")
+        formats.append(f"bestvideo[ext={ext}]")
+        formats.append("bestvideo")
+
+        return "/".join(formats)
+
+    def _video_format_string(self):
+        ext = self.config['video']['preferred_format']
+        aext = self.config['audio']['preferred_format']
+        codec = self.config['video'].get('preferred_codec', 'h264')
+        vcodec = {'h264': 'avc1', 'h265': 'hevc', 'vp9': 'vp9'}.get(codec, 'avc1')
+        priorities = self.config['video'].get('quality_priority', ['480', '360', '720'])
+
+        formats = []
+        for q in priorities:
+            formats.append(f"bestvideo[ext={ext}][vcodec^={vcodec}][height<={q}]+bestaudio[ext={aext}]")
+        formats.append(f"bestvideo[ext={ext}][vcodec^={vcodec}][height<=1080][height>360]+bestaudio[ext={aext}]")
+        formats.append(f"bestvideo[ext={ext}]+bestaudio[ext={aext}]")
         formats.append("best")
 
+        return "/".join(formats)
+
+    def _audio_only_format_string(self):
+        ext = self.config['audio']['preferred_format']
+        priorities = self.config['audio'].get('quality_priority', ['128', '192', '264'])
+        formats = []
+        for q in priorities:
+            q_int = int(q)
+            formats.append(f"bestaudio[ext={ext}][abr<={q_int + 16}][abr>={max(0, q_int - 16)}]")
+        formats.append(f"bestaudio[ext={ext}]")
+        formats.append("bestaudio")
         return "/".join(formats)
 
     def _audio_format_string(self):
@@ -233,21 +299,81 @@ class Downloader:
             return {'ffmpeg_location': path}
         return {}
 
-    def download_video(self, entry, job_dir):
+    def download_video(self, entry, job_dir, fmt_override=None):
         work_dir = self._resolve(job_dir)
         os.makedirs(work_dir, exist_ok=True)
 
         tmpl = self.config['general']['filename_template']
         outtmpl = os.path.join(work_dir, tmpl)
 
+        merge_mode = self.config['general'].get('merge_mode', False)
+
+        if merge_mode:
+            v_opts = {
+                'format': fmt_override or self._video_only_format_string(),
+                'outtmpl': outtmpl,
+                'quiet': True,
+                'no_warnings': True,
+                'noprogress': True,
+                'writethumbnail': True,
+                'skip_download': False,
+                'progress_hooks': [self._progress_hook],
+                'postprocessors': [{'key': 'EmbedThumbnail'}],
+            }
+            v_opts.update(self._cookies_opts())
+            v_opts.update(self._rate_limit_opts())
+            v_opts.update(self._sponsorblock_opts())
+            v_opts.update(self._ffmpeg_location_opts())
+
+            self.logger.info(f"Downloading video stream (merge mode): {entry['title']}")
+            with yt_dlp.YoutubeDL(v_opts) as ydl:
+                try:
+                    ydl.download([entry['url']])
+                except Exception as e:
+                    raise RuntimeError(f"Video stream download failed: {e}")
+
+            v_path = self._find_media_file(work_dir)
+            if not v_path:
+                raise RuntimeError("Video stream download produced no file")
+
+            a_opts = {
+                'format': self._audio_only_format_string(),
+                'outtmpl': outtmpl,
+                'quiet': True,
+                'no_warnings': True,
+                'noprogress': True,
+                'skip_download': False,
+                'progress_hooks': [self._progress_hook],
+            }
+            a_opts.update(self._cookies_opts())
+            a_opts.update(self._rate_limit_opts())
+            a_opts.update(self._sponsorblock_opts())
+            a_opts.update(self._ffmpeg_location_opts())
+
+            self.logger.info(f"Downloading audio stream (merge mode): {entry['title']}")
+            with yt_dlp.YoutubeDL(a_opts) as ydl:
+                try:
+                    ydl.download([entry['url']])
+                except Exception as e:
+                    raise RuntimeError(f"Audio stream download failed: {e}")
+
+            a_path = self._find_media_file(work_dir)
+            if not a_path:
+                raise RuntimeError("Audio stream download produced no file")
+
+            ext = self.config['video']['preferred_format']
+            merged_path = os.path.join(work_dir, f"merged.{ext}")
+            remuxer = Remuxer(self.logger)
+            return remuxer.merge_video_audio(v_path, a_path, merged_path)
+
         ydl_opts = {
-            'format': self._video_format_string(),
+            'format': fmt_override or self._video_format_string(),
             'outtmpl': outtmpl,
             'quiet': True,
             'no_warnings': True,
             'noprogress': True,
             'writethumbnail': True,
-            'merge_output_format': 'mp4',
+            'merge_output_format': self.config['video']['preferred_format'],
             'skip_download': False,
             'progress_hooks': [self._progress_hook],
             'postprocessors': [{'key': 'EmbedThumbnail'}],
@@ -265,7 +391,7 @@ class Downloader:
             except Exception as e:
                 raise RuntimeError(f"Download failed: {e}")
 
-    def download_audio(self, entry, job_dir):
+    def download_audio(self, entry, job_dir, fmt_override=None):
         work_dir = self._resolve(job_dir)
         os.makedirs(work_dir, exist_ok=True)
 
@@ -274,7 +400,7 @@ class Downloader:
         quality = self.config['audio']['default_quality']
 
         ydl_opts = {
-            'format': self._audio_format_string(),
+            'format': fmt_override or self._audio_format_string(),
             'outtmpl': outtmpl,
             'quiet': True,
             'no_warnings': True,
@@ -282,7 +408,7 @@ class Downloader:
             'writethumbnail': True,
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'm4a',
+                'preferredcodec': self.config['audio']['preferred_format'],
                 'preferredquality': str(quality),
             }, {
                 'key': 'EmbedThumbnail',

@@ -34,6 +34,7 @@ temp/
 downloads/
 archive/
 log/
+logs/
 failed/
 _resume_queue.json
 

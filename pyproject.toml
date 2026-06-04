@@ -3,7 +3,7 @@ requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "melt"
+name = "meltdl"
 version = "1.0.1"
 description = "Modern YouTube downloader CLI with subtitle cleaning, parallel downloads, SponsorBlock, and sound notifications"
 readme = "README.md"
