@@ -127,8 +127,12 @@ Everything is done for v1.1.0. The project is feature-complete per the original 
 
 ### Build Workflow
 - `.github/workflows/build.yml` triggers on `workflow_dispatch` (with `tag` input) or `release: [published]`
-- Builds Windows (.exe), Linux, macOS binaries with bundled ffmpeg + sounds
-- Uploads to the release page automatically
+- Builds Windows (`melt.exe`), Linux (`melt-linux`), macOS (`melt-macos`) binaries with bundled ffmpeg + sounds
+- Linux installs ffmpeg via apt (johnvansickle.com is dead)
+- macOS downloads ffmpeg from evermeet.cx
+- Windows downloads ffmpeg from gyan.dev
+- Uploads to release via `gh release upload ${{ env.TAG }}` — distinct names per platform
+- `GITHUB_TOKEN` with `contents: write` permission handles auth
 
 ## Key Decisions (Historical)
 - Interactive main menu replaces direct URL prompt entry
