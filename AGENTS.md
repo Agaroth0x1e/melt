@@ -136,6 +136,7 @@ All source files are directly in the project root:
 - Windows downloads ffmpeg from gyan.dev
 - Uses `gh release upload ${{ env.TAG }}` — distinct names per platform to avoid collisions
 - `GITHUB_TOKEN` with `contents: write` permission handles auth
+- Uses `actions/checkout@v6` and `actions/setup-python@v6` (Node 24 compatible) — v4/v5 use deprecated Node 20
 
 ## Key Decisions (Historical)
 - Interactive main menu replaces direct URL prompt entry
