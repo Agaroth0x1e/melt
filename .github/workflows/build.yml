@@ -31,7 +31,7 @@ jobs:
           move ffmpeg_temp/*/bin/ffmpeg.exe ffmpeg.exe
           Remove-Item ffmpeg_temp -Recurse -Force
           Remove-Item ffmpeg.7z
-      - run: pyinstaller --onefile --icon "ico/icon.ico" --add-data "sounds;sounds" --add-data "ffmpeg.exe;." --name melt --distpath dist --clean --noconfirm main.py
+      - run: pyinstaller --onefile --icon "ico/icon.ico" --add-data "sounds;sounds" --add-binary "ffmpeg.exe;." --noupx --name melt --distpath dist --clean --noconfirm main.py
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -59,7 +59,7 @@ jobs:
           tar -xf ffmpeg.tar.xz
           find . -name ffmpeg -type f -exec cp {} ffmpeg \;
           rm -rf ffmpeg.tar.xz ffmpeg-n8.1-latest-linux64-lgpl*
-      - run: pyinstaller --onefile --add-data "sounds:sounds" --add-data "ffmpeg:." --name melt --distpath dist --clean --noconfirm main.py
+      - run: pyinstaller --onefile --add-data "sounds:sounds" --add-binary "ffmpeg:." --noupx --name melt --distpath dist --clean --noconfirm main.py
       - run: mv dist/melt dist/melt-linux
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -85,7 +85,7 @@ jobs:
       - name: Install ffmpeg
         run: brew install ffmpeg
       - run: cp "$(which ffmpeg)" ffmpeg
-      - run: pyinstaller --onefile --add-data "sounds:sounds" --add-data "ffmpeg:." --name melt --distpath dist --clean --noconfirm main.py
+      - run: pyinstaller --onefile --add-data "sounds:sounds" --add-binary "ffmpeg:." --noupx --name melt --distpath dist --clean --noconfirm main.py
       - run: mv dist/melt dist/melt-macos
       - name: Upload artifact
         uses: actions/upload-artifact@v4
