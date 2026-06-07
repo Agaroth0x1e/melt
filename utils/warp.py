@@ -17,19 +17,6 @@ REGISTER_URL = 'https://api.cloudflareclient.com/v0a2158/reg'
 WP_API = 'https://api.github.com/repos/octeep/wireproxy/releases/latest'
 WP_PORT = 1080
 
-WARP_LOCATIONS = {
-    'auto': '',
-    'us': '162.159.192.1:2408',
-    'uk': '162.159.195.1:2408',
-    'gb': '162.159.195.1:2408',
-    'fr': '162.159.195.1:2408',
-    'de': '162.159.195.1:2408',
-    'jp': '162.159.196.1:2408',
-    'sg': '162.159.196.1:2408',
-    'au': '162.159.197.1:2408',
-    'br': '162.159.200.1:2408',
-}
-
 
 class WarpManager:
     def __init__(self, config_dir, logger):
@@ -172,17 +159,13 @@ class WarpManager:
             f.write(f'BindAddress = 127.0.0.1:{WP_PORT}\n')
         return conf_path
 
-    def connect(self, location='', max_retries=3):
+    def connect(self, location='', max_retries=10):
         if self.is_connected():
             return True
 
         cfg = self.load_config()
         if not cfg:
             cfg = self.register(location)
-        elif location:
-            endpoint = WARP_LOCATIONS.get(location)
-            if endpoint:
-                cfg['peer_endpoint'] = endpoint
 
         wp = self._wp_binary()
         if not wp:
@@ -197,9 +180,15 @@ class WarpManager:
             return False
 
         for attempt in range(max_retries):
-            conf_path = self._write_conf(cfg)
+            if attempt > 0:
+                self.logger.info(f"Re-registering for {location.upper()} IP (attempt {attempt+1})...")
+                self.disconnect()
+                time.sleep(1)
+                if self.config_file.exists():
+                    self.config_file.unlink()
+                cfg = self.register(location)
 
-            self.logger.info(f"Starting wireproxy (SOCKS5 :{WP_PORT})...")
+            conf_path = self._write_conf(cfg)
 
             try:
                 self._process = subprocess.Popen(
@@ -212,27 +201,23 @@ class WarpManager:
                     stderr = self._process.stderr.read().decode(errors='replace')[:300] if self._process.stderr else ''
                     raise RuntimeError(f"wireproxy exited immediately: {stderr}")
 
-                if location and location != 'auto':
+                if location:
                     egress_ip = self._check_egress()
                     if egress_ip:
                         loc, _ = self._get_ip_location(egress_ip)
-                        loc_code = loc.split(', ')[-1].lower() if loc else ''
-                        if loc_code != '?' and location not in loc_code:
-                            self.logger.warn(f"Egress is {loc_code}, wanted {location} — re-registering...")
-                            self.disconnect()
-                            time.sleep(1)
-                            cfg = self.register(location)
+                        loc_lower = loc.lower() if loc else ''
+                        if location not in loc_lower:
+                            self.logger.warn(f"Got {loc}, wanted {location.upper()} — retrying...")
                             continue
+                        self.logger.info(f"Egress confirmed: {loc}")
 
                 self.logger.info(f"WARP tunnel connected (SOCKS5 :{WP_PORT})")
                 return True
             except Exception as e:
-                self.logger.warn(f"WARP tunnel attempt {attempt+1} failed: {e}")
+                self.logger.warn(f"Attempt {attempt+1} failed: {e}")
                 self.disconnect()
-                if attempt < max_retries - 1:
-                    time.sleep(2)
-                    cfg = self.register(location)
 
+        self.logger.warn(f"Could not get a {location.upper()} IP after {max_retries} attempts")
         return False
 
     def _check_egress(self):
