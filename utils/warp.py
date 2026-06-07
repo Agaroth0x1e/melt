@@ -17,6 +17,19 @@ REGISTER_URL = 'https://api.cloudflareclient.com/v0a2158/reg'
 WP_API = 'https://api.github.com/repos/octeep/wireproxy/releases/latest'
 WP_PORT = 1080
 
+WARP_LOCATIONS = {
+    'auto': '',
+    'us': '162.159.192.1:2408',
+    'uk': '162.159.195.1:2408',
+    'gb': '162.159.195.1:2408',
+    'fr': '162.159.195.1:2408',
+    'de': '162.159.195.1:2408',
+    'jp': '162.159.196.1:2408',
+    'sg': '162.159.196.1:2408',
+    'au': '162.159.197.1:2408',
+    'br': '162.159.200.1:2408',
+}
+
 
 class WarpManager:
     def __init__(self, config_dir, logger):
@@ -36,20 +49,24 @@ class WarpManager:
         ).decode()
         return priv_b64, pub_b64
 
-    def register(self):
+    def register(self, location=''):
         import requests
         private_key, public_key = self._gen_keypair()
         install_id = str(uuid.uuid4())
         fwt = os.urandom(32).hex()
 
-        self.logger.info("Registering WARP device...")
+        locale_map = {'us': 'en_US', 'uk': 'en_GB', 'gb': 'en_GB', 'fr': 'fr_FR',
+                      'de': 'de_DE', 'jp': 'ja_JP', 'sg': 'en_SG', 'au': 'en_AU', 'br': 'pt_BR'}
+        locale = locale_map.get(location, 'en_US')
+
+        self.logger.info(f"Registering WARP device (locale={locale})...")
         r = requests.post(REGISTER_URL, json={
             'key': public_key,
             'install_id': install_id,
             'fcm_token': fwt,
             'referer': '',
             'warp_enabled': True,
-            'locale': 'en_US',
+            'locale': locale,
         }, headers={
             'User-Agent': 'okhttp/3.12.1',
             'Content-Type': 'application/json; charset=UTF-8',
@@ -155,13 +172,17 @@ class WarpManager:
             f.write(f'BindAddress = 127.0.0.1:{WP_PORT}\n')
         return conf_path
 
-    def connect(self):
+    def connect(self, location='', max_retries=3):
         if self.is_connected():
             return True
 
         cfg = self.load_config()
         if not cfg:
-            cfg = self.register()
+            cfg = self.register(location)
+        elif location:
+            endpoint = WARP_LOCATIONS.get(location)
+            if endpoint:
+                cfg['peer_endpoint'] = endpoint
 
         wp = self._wp_binary()
         if not wp:
@@ -175,27 +196,54 @@ class WarpManager:
             )
             return False
 
-        conf_path = self._write_conf(cfg)
+        for attempt in range(max_retries):
+            conf_path = self._write_conf(cfg)
 
-        self.logger.info(f"Starting wireproxy (SOCKS5 :{WP_PORT})...")
+            self.logger.info(f"Starting wireproxy (SOCKS5 :{WP_PORT})...")
 
+            try:
+                self._process = subprocess.Popen(
+                    [wp, '-c', str(conf_path)],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    cwd=str(self.config_dir)
+                )
+                time.sleep(3)
+                if self._process.poll() is not None:
+                    stderr = self._process.stderr.read().decode(errors='replace')[:300] if self._process.stderr else ''
+                    raise RuntimeError(f"wireproxy exited immediately: {stderr}")
+
+                if location and location != 'auto':
+                    egress_ip = self._check_egress()
+                    if egress_ip:
+                        loc, _ = self._get_ip_location(egress_ip)
+                        loc_code = loc.split(', ')[-1].lower() if loc else ''
+                        if loc_code != '?' and location not in loc_code:
+                            self.logger.warn(f"Egress is {loc_code}, wanted {location} — re-registering...")
+                            self.disconnect()
+                            time.sleep(1)
+                            cfg = self.register(location)
+                            continue
+
+                self.logger.info(f"WARP tunnel connected (SOCKS5 :{WP_PORT})")
+                return True
+            except Exception as e:
+                self.logger.warn(f"WARP tunnel attempt {attempt+1} failed: {e}")
+                self.disconnect()
+                if attempt < max_retries - 1:
+                    time.sleep(2)
+                    cfg = self.register(location)
+
+        return False
+
+    def _check_egress(self):
         try:
-            self._process = subprocess.Popen(
-                [wp, '-c', str(conf_path)],
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                cwd=str(self.config_dir)
-            )
-            time.sleep(2)
-            if self._process.poll() is not None:
-                stderr = self._process.stderr.read().decode(errors='replace')[:300] if self._process.stderr else ''
-                raise RuntimeError(f"wireproxy exited immediately: {stderr}")
-
-            self.logger.info(f"WARP tunnel connected (SOCKS5 :{WP_PORT})")
-            return True
-        except Exception as e:
-            self.logger.warn(f"WARP tunnel failed: {e}")
-            self.disconnect()
-            return False
+            import requests
+            r = requests.get('https://api.ipify.org?format=json', timeout=5,
+                             proxies={'http': f'socks5://127.0.0.1:{WP_PORT}',
+                                      'https': f'socks5://127.0.0.1:{WP_PORT}'})
+            return r.json().get('ip', '')
+        except Exception:
+            return ''
 
     def disconnect(self):
         if self._process:
@@ -237,15 +285,22 @@ class WarpManager:
             pass
         return '?', '?'
 
+    def _get_country(self, ip):
+        loc, _ = self._get_ip_location(ip)
+        return loc if loc != '?' else 'Unknown'
+
     def show_status(self, cli):
         import requests
         tunnel_active = self.is_connected()
         current = '?'
         via_warp = '?'
+        current_loc = '?'
+        warp_loc = '?'
 
         try:
             r = requests.get('https://api.ipify.org?format=json', timeout=10)
             current = r.json().get('ip', '?')
+            current_loc = self._get_country(current)
         except Exception as e:
             current = f"Error: {e}"
 
@@ -255,6 +310,7 @@ class WarpManager:
                 r = requests.get('https://api.ipify.org?format=json', timeout=10,
                                  proxies={'http': proxy_url, 'https': proxy_url})
                 via_warp = r.json().get('ip', '?')
+                warp_loc = self._get_country(via_warp)
             except Exception as e:
                 via_warp = f"Error: {e}"
 
@@ -262,7 +318,9 @@ class WarpManager:
         if tunnel_active:
             cli.console.print(f"  Status:       [green]Connected[/]")
             cli.console.print(f"  Your IP:      [green]{current}[/]")
+            cli.console.print(f"  Location:     [dim]{current_loc}[/]")
             cli.console.print(f"  Via WARP:     [green]{via_warp}[/]")
+            cli.console.print(f"  WARP Location:[dim]{warp_loc}[/]")
             if current != via_warp and 'Error' not in str(via_warp) and 'Error' not in str(current):
                 cli.console.print("  [bold green]WARP is working — IP changed[/]")
             elif current == via_warp:
@@ -270,6 +328,7 @@ class WarpManager:
         else:
             cli.console.print(f"  Status:       [red]Disconnected[/]")
             cli.console.print(f"  Your IP:      [green]{current}[/]")
+            cli.console.print(f"  Location:     [dim]{current_loc}[/]")
         cli.console.print()
         return current, via_warp
 

@@ -130,6 +130,7 @@ class Config:
             "network": {
                 "proxy": "",
                 "warp": False,
+                "warp_location": "",
                 "rate_limit": "",
                 "cookies_file": "",
                 "cookies_from_browser": "",

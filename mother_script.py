@@ -262,11 +262,12 @@ class MotherScript:
         if not force and not self.config['network'].get('warp', False):
             return False
         wm = self._ensure_warp()
+        location = self.config['network'].get('warp_location', '')
         if wm.load_config() is None:
             self.cli.show_info("Registering WARP device...")
-            wm.register()
+            wm.register(location)
         self.cli.show_info("Connecting WARP tunnel...")
-        if wm.connect():
+        if wm.connect(location):
             self.cli.show_info("WARP tunnel connected")
             return True
         self.cli.show_warning("WARP tunnel failed to connect")
@@ -572,10 +573,13 @@ class MotherScript:
                 if wm.is_connected():
                     self._disconnect_warp()
                     self.cli.show_info("Disconnected from tunnel")
+                    self.logger.info("Tunnel disconnected")
                 else:
-                    self._connect_warp(force=True)
-                    self.cli.show_info("Connected to tunnel")
-                self.logger.info(f"Tunnel toggled: connected={wm.is_connected()}")
+                    if self._connect_warp(force=True):
+                        self.cli.show_info("Connected to tunnel")
+                        self.logger.info("Tunnel connected")
+                    else:
+                        self.logger.info("Tunnel connection failed")
                 self.cli.press_enter()
                 continue
 
