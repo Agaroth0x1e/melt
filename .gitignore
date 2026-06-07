@@ -49,3 +49,4 @@ bin/host/melt.exe
 # Generated
 icon_preview.png
 config/config.json
+ffmpeg.exe
