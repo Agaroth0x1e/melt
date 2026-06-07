@@ -131,6 +131,7 @@ class Config:
                 "proxy": "",
                 "warp": False,
                 "warp_location": "",
+                "warp_retries": 3,
                 "rate_limit": "",
                 "cookies_file": "",
                 "cookies_from_browser": "",
