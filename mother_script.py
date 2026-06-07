@@ -145,10 +145,18 @@ class MotherScript:
     m            Modify settings
     q / quit     Quit
 
+  [bold]WARP tunnel:[/]
+    Set [bold]warp: true[/] in config to enable the built-in WARP tunnel.
+    Set [bold]warp_location: "us"[/] to request an egress IP in a specific country.
+    Available locations: [green]us[/], [green]jp[/], [green]gb[/], [green]fr[/],
+    [green]de[/], [green]sg[/], [green]au[/], [green]br[/], or [green]""[/] (auto).
+    Menu [bold]10[/] toggles tunnel on/off; [bold]11[/] shows net status.
+
   [bold]Config:[/]
     Edit [bold]config/config.json[/] for permanent defaults:
       format, threads, timeout, numbering, duplicate action, sounds,
-      format_preview, merge_mode, chapter_splitter, cookies, rate_limit, etc.
+      warp, warp_location, format_preview, merge_mode, chapter_splitter,
+      cookies, rate_limit, etc.
     Use [bold]melt --profile <name>[/] to load a saved profile.
     Use [bold]melt profile save <name>[/] to save a profile.
 """

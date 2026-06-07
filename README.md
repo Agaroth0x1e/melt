@@ -389,6 +389,13 @@ Full reference for `config/config.json`:
 | `extract_flat.inspect` | `true` | `true` / `false` |
 | `extract_flat.search` | `false` | `true` / `false` |
 
+### WARP Tunnel
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `warp` | `false` | `true` / `false` — Enable built-in WARP tunnel via wireproxy (SOCKS5 :1080) |
+| `warp_location` | `""` | Request egress IP region: `"us"`, `"jp"`, `"gb"`, `"fr"`, `"de"`, `"sg"`, `"au"`, `"br"`, or `""` (auto). Re-registers until a matching egress is assigned |
+
 ### Video
 
 | Key | Default | Available values |
