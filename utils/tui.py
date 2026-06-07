@@ -33,7 +33,8 @@ def _build_dashboard(stats_data, config):
     )
 
     header_text = Text("MelT Dashboard", style="bold cyan")
-    header_text.append(f"  v1.1.0", style="dim")
+    from main import VERSION
+    header_text.append(f"  v{VERSION}", style="dim")
     header_text.append(f"  |  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", style="green")
     layout["header"].update(Panel(header_text, box=box.ROUNDED))
 

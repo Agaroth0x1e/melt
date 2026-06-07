@@ -50,10 +50,11 @@ class CLI:
         self.console = console
 
     def show_banner(self):
-        banner = Text("""
+        from main import VERSION
+        banner = Text(f"""
     +====================+
     |       MelT         |
-    |      v1.1.0        |
+    |      v{VERSION}        |
     +====================+
 """, style="bold cyan")
         self.console.print(Align.center(banner))
