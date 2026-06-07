@@ -574,7 +574,7 @@ class MotherScript:
 
             elif choice in ('10', 'tunnel'):
                 if not self.config['network'].get('warp', False):
-                    self.cli.console.print("  [red]WARP is not enabled.[/] Enable it ([green]set true[/]) in [bold]config[/].")
+                    self.cli.console.print("  [red]WARP is not enabled.[/] Turn it on in config ([green]warp: true[/]).")
                     self.cli.press_enter()
                     continue
                 wm = self._ensure_warp()
