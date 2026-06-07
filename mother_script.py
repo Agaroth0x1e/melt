@@ -556,12 +556,10 @@ class MotherScript:
                 self.cli.console.print(self.HELP_URL_TEXT)
                 continue
 
-            elif choice in ('i', 'ip'):
-                self.logger.info("Check public IP")
+            elif choice in ('i', 'status'):
+                self.logger.info("Check connection status")
                 wm = self._ensure_warp()
-                if self.config['network'].get('warp', False) and not wm.is_connected():
-                    self._connect_warp()
-                wm.show_public_ip(self.cli)
+                wm.show_status(self.cli)
                 self.cli.press_enter()
                 continue
 

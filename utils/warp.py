@@ -237,6 +237,42 @@ class WarpManager:
             pass
         return '?', '?'
 
+    def show_status(self, cli):
+        import requests
+        tunnel_active = self.is_connected()
+        current = '?'
+        via_warp = '?'
+
+        try:
+            r = requests.get('https://api.ipify.org?format=json', timeout=10)
+            current = r.json().get('ip', '?')
+        except Exception as e:
+            current = f"Error: {e}"
+
+        if tunnel_active:
+            proxy_url = f'socks5://127.0.0.1:{WP_PORT}'
+            try:
+                r = requests.get('https://api.ipify.org?format=json', timeout=10,
+                                 proxies={'http': proxy_url, 'https': proxy_url})
+                via_warp = r.json().get('ip', '?')
+            except Exception as e:
+                via_warp = f"Error: {e}"
+
+        cli.console.print(f"\n[bold cyan]Connection Status[/]")
+        if tunnel_active:
+            cli.console.print(f"  Status:       [green]Connected[/]")
+            cli.console.print(f"  Your IP:      [green]{current}[/]")
+            cli.console.print(f"  Via WARP:     [green]{via_warp}[/]")
+            if current != via_warp and 'Error' not in str(via_warp) and 'Error' not in str(current):
+                cli.console.print("  [bold green]WARP is working — IP changed[/]")
+            elif current == via_warp:
+                cli.console.print("  [bold yellow]WARP proxy found but IP unchanged (check route)[/]")
+        else:
+            cli.console.print(f"  Status:       [red]Disconnected[/]")
+            cli.console.print(f"  Your IP:      [green]{current}[/]")
+        cli.console.print()
+        return current, via_warp
+
     def show_public_ip(self, cli):
         import requests
         import urllib.request
