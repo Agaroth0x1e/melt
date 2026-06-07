@@ -39,11 +39,7 @@ failed/
 _resume_queue.json
 
 # Build artifacts
-bin/windows/melt.exe
-bin/linux/melt
-bin/macos/melt
-bin/host/melt
-bin/host/melt.exe
+bin/
 # Sounds are tracked (small files, essential)
 
 # Generated
