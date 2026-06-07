@@ -200,7 +200,8 @@ class CLI:
         self.console.print(f"[yellow]WARN[/] {message}")
 
     def show_info(self, message):
-        print(f"\r\033[94mINFO\033[0m {message}", flush=True)
+        self.console.print(f"[bold blue]INFO[/] {message}")
+        sys.stdout.flush()
 
     def show_completion(self, success_count, fail_count, dest, log_path, failed_path, sub_fail_count=0, elapsed=0, skip_count=0, skipped_path=None):
         self.console.print()
