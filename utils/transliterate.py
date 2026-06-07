@@ -13,7 +13,7 @@ class Transliterator:
                 from hangul_romanize import Transliter as KoRomanizer
                 from hangul_romanize.rule import academic as default_rules
                 self._ko = KoRomanizer(default_rules)
-            except ImportError:
+            except Exception:
                 self._ko = False
 
     def _init_ja(self):
@@ -21,7 +21,7 @@ class Transliterator:
             try:
                 import pykakasi
                 self._ja = pykakasi.kakasi()
-            except ImportError:
+            except Exception:
                 self._ja = False
 
     def _init_any(self):
@@ -29,7 +29,7 @@ class Transliterator:
             try:
                 from anyascii import anyascii
                 self._any = anyascii
-            except ImportError:
+            except Exception:
                 self._any = False
 
     def to_romaji(self, text, lang):
