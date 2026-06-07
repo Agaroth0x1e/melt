@@ -162,28 +162,28 @@ class WarpManager:
     def connect(self, location='', cli=None, max_retries=10):
         if self.is_connected():
             if cli:
-                cli.console.print("  [yellow]Already connected[/]")
+                cli.show_warning("Already connected")
             return True
 
         cfg = self.load_config()
         if not cfg:
             self.logger.info("No saved config, registering new WARP device...")
             if cli:
-                cli.console.print("  Registering new WARP device with Cloudflare...")
+                cli.show_info("Registering new WARP device with Cloudflare...")
             cfg = self.register(location)
 
         wp = self._wp_binary()
         if not wp:
             self.logger.warn("wireproxy not found, downloading...")
             if cli:
-                cli.console.print("  [yellow]wireproxy binary not found, downloading...[/]")
+                cli.show_info("wireproxy binary not found, downloading...")
             wp = self._download_wp()
 
         if not wp:
             msg = "Could not get wireproxy binary. Install from https://github.com/octeep/wireproxy"
             self.logger.warn(msg)
             if cli:
-                cli.console.print(f"  [red]{msg}[/]")
+                cli.show_warning(msg)
             return False
 
         loc_target = location.upper() if location else 'auto'
@@ -192,7 +192,7 @@ class WarpManager:
                 msg = f"Re-registering for {loc_target} IP (attempt {attempt+1}/{max_retries})..."
                 self.logger.info(msg)
                 if cli:
-                    cli.console.print(f"  [yellow]{msg}[/]")
+                    cli.show_info(msg)
                 self.disconnect()
                 time.sleep(1)
                 if self.config_file.exists():
@@ -200,7 +200,7 @@ class WarpManager:
                 cfg = self.register(location)
 
             if cli:
-                cli.console.print(f"  Starting wireproxy (SOCKS5 :{WP_PORT})...")
+                cli.show_info(f"Starting wireproxy (SOCKS5 :{WP_PORT})...")
             conf_path = self._write_conf(cfg)
 
             try:
@@ -224,7 +224,7 @@ class WarpManager:
                             warn = f"Got {loc}, wanted {loc_target} — retrying..."
                             self.logger.warn(warn)
                             if cli:
-                                cli.console.print(f"  [yellow]{warn}[/]")
+                                cli.show_warning(warn)
                             self.disconnect()
                             continue
                         ok = f"Egress confirmed: {loc}"
@@ -246,13 +246,13 @@ class WarpManager:
                 err = f"Attempt {attempt+1}/{max_retries} failed: {e}"
                 self.logger.warn(err)
                 if cli:
-                    cli.console.print(f"  [red]{err}[/]")
+                    cli.show_warning(err)
                 self.disconnect()
 
         final = f"Could not get a {loc_target} IP after {max_retries} attempts"
         self.logger.warn(final)
         if cli:
-            cli.console.print(f"  [red]{final}[/]")
+            cli.show_warning(final)
         return False
 
     def _check_egress(self):

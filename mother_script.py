@@ -272,7 +272,7 @@ class MotherScript:
         wm = self._ensure_warp()
         location = self.config['network'].get('warp_location', '')
         loc_str = f" ({location.upper()})" if location else ""
-        self.cli.console.print(f"  Connecting to WARP tunnel{loc_str}...")
+        self.cli.show_info(f"Connecting to WARP tunnel{loc_str}")
         self.logger.info(f"Connecting WARP tunnel (location={location or 'auto'})...")
         ok = wm.connect(location, self.cli)
         if ok:
@@ -582,7 +582,7 @@ class MotherScript:
                 wm = self._ensure_warp()
                 if wm.is_connected():
                     self._disconnect_warp()
-                    self.cli.console.print("  [yellow]Disconnected from tunnel[/]")
+                    self.cli.show_info("Disconnected from tunnel")
                     self.logger.info("Tunnel disconnected")
                 else:
                     self._connect_warp(force=True)
