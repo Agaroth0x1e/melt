@@ -149,7 +149,7 @@ class MotherScript:
     Set [bold]warp: true[/] in config to enable the built-in WARP tunnel.
     Set [bold]warp_location: "us,fr,ja"[/] to try locations in order (comma-separated).
     Set [bold]warp_retries: 3[/] for retries per location before falling back.
-    Available codes: [green]us[/], [green]jp[/], [green]gb[/], [green]fr[/],
+    Available countries: [green]us[/], [green]jp[/], [green]gb[/], [green]fr[/],
     [green]de[/], [green]sg[/], [green]au[/], [green]br[/], or [green]""[/] (auto).
     Menu [bold]10[/] toggles tunnel on/off; [bold]11[/] shows net status.
 
