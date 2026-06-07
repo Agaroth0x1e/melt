@@ -146,11 +146,12 @@ class MotherScript:
     q / quit     Quit
 
   [bold]WARP tunnel:[/]
-    Set [bold]warp: true[/] in config to enable the built-in WARP tunnel.
-    Set [bold]warp_location: "us,fr,ja"[/] to try locations in order (comma-separated).
-    Set [bold]warp_retries: 3[/] for retries per location before falling back.
-    Available countries: [green]us[/], [green]jp[/], [green]gb[/], [green]fr[/],
-    [green]de[/], [green]sg[/], [green]au[/], [green]br[/], or [green]""[/] (auto).
+    Set [bold]warp: true[/] in config to enable the built-in WARP tunnel
+    via [bold]wireproxy[/] (userspace WireGuard — no admin rights needed).
+    WARP routes through Cloudflare's nearest edge — great for avoiding
+    YouTube 429 errors. Egress country is determined by Cloudflare, not
+    user-selectable on free tier. For region-unlock, set a proxy instead.
+    Set [bold]warp_retries: 3[/] for connection retry count.
     Menu [bold]10[/] toggles tunnel on/off; [bold]11[/] shows net status.
 
   [bold]Config:[/]
@@ -271,16 +272,10 @@ class MotherScript:
         if not force and not self.config['network'].get('warp', False):
             return False
         wm = self._ensure_warp()
-        raw = self.config['network'].get('warp_location', '')
-        locations = [l.strip() for l in raw.split(',') if l.strip()] if raw else ['']
         retries = self.config['network'].get('warp_retries', 3)
-        loc_str = ', '.join(l.upper() for l in locations if l) if any(locations) else 'auto'
-        if loc_str:
-            self.cli.show_info(f"Connecting to WARP tunnel — trying: {loc_str}")
-        else:
-            self.cli.show_info("Connecting to WARP tunnel")
-        self.logger.info(f"Connecting WARP tunnel (locations={locations}, retries={retries})...")
-        ok = wm.connect(locations, self.cli, max_retries=retries)
+        self.cli.show_info("Connecting WARP tunnel...")
+        self.logger.info(f"Connecting WARP tunnel (retries={retries})...")
+        ok = wm.connect(max_retries=retries, cli=self.cli)
         if ok:
             self.cli.console.print("  [green]Connected to tunnel[/]")
             self.logger.info("Tunnel connected")

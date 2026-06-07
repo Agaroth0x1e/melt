@@ -159,14 +159,11 @@ class WarpManager:
             f.write(f'BindAddress = 127.0.0.1:{WP_PORT}\n')
         return conf_path
 
-    def connect(self, locations=None, cli=None, max_retries=3):
+    def connect(self, locations=None, cli=None, max_retries=1):
         if self.is_connected():
             if cli:
                 cli.show_warning("Already connected")
             return True
-
-        if not locations:
-            locations = ['']
 
         wp = self._wp_binary()
         if not wp:
@@ -181,88 +178,59 @@ class WarpManager:
                 cli.show_warning(msg)
             return False
 
-        for loc in locations:
-            loc_tag = loc.upper() if loc else 'auto'
-            if locations and loc:
+        for attempt in range(max_retries):
+            if attempt > 0:
+                delay = 5 * (attempt + 1)
+                msg = f"Retry {attempt+1}/{max_retries} (waiting {delay}s)..."
+                self.logger.info(msg)
                 if cli:
-                    cli.show_info(f"Trying location: {loc_tag}")
+                    cli.show_info(msg)
+                self.disconnect()
+                time.sleep(delay)
+                if self.config_file.exists():
+                    self.config_file.unlink()
 
-            for attempt in range(max_retries):
-                if attempt > 0:
-                    delay = 5 * (attempt + 1)
-                    msg = f"Retry {attempt+1}/{max_retries} for {loc_tag} (waiting {delay}s)..."
-                    self.logger.info(msg)
-                    if cli:
-                        cli.show_info(msg)
-                    self.disconnect()
-                    time.sleep(delay)
-                    if self.config_file.exists():
-                        self.config_file.unlink()
-                    cfg = self.register(loc)
-                else:
-                    cfg = self.load_config()
-                    if not cfg:
-                        if cli:
-                            cli.show_info("Registering new WARP device with Cloudflare...")
-                        cfg = self.register(loc)
-
+            cfg = self.load_config()
+            if not cfg:
                 if cli:
-                    cli.show_info(f"Starting wireproxy (SOCKS5 :{WP_PORT})...")
-                conf_path = self._write_conf(cfg)
-
-                try:
-                    self._process = subprocess.Popen(
-                        [wp, '-c', str(conf_path)],
-                        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                        cwd=str(self.config_dir)
-                    )
-                    time.sleep(3)
-                    if self._process.poll() is not None:
-                        stderr = self._process.stderr.read().decode(errors='replace')[:300] if self._process.stderr else ''
-                        self.logger.error(f"wireproxy stderr: {stderr}")
-                        raise RuntimeError(f"wireproxy exited immediately: {stderr}")
-
-                    if loc:
-                        egress_ip = self._check_egress()
-                        if egress_ip:
-                            loc_name, _ = self._get_ip_location(egress_ip)
-                            loc_lower = loc_name.lower() if loc_name else ''
-                            if loc not in loc_lower:
-                                warn = f"Got {loc_name}, wanted {loc_tag}"
-                                self.logger.warn(warn)
-                                if cli:
-                                    cli.show_warning(warn)
-                                self.disconnect()
-                                continue
-                            ok = f"Egress confirmed: {loc_name}"
-                            self.logger.info(ok)
-                            if cli:
-                                cli.console.print(f"  [green]{ok}[/]")
-                    else:
-                        if cli:
-                            egress_ip = self._check_egress()
-                            if egress_ip:
-                                loc_name, _ = self._get_ip_location(egress_ip)
-                                cli.console.print(f"  [dim]Egress: {loc_name} ({egress_ip})[/]")
-
-                    self.logger.info("WARP tunnel connected")
-                    if cli:
-                        cli.console.print(f"  [green]WARP tunnel connected (SOCKS5 :{WP_PORT})[/]")
-                    return True
-                except Exception as e:
-                    err = f"Attempt {attempt+1}/{max_retries} for {loc_tag} failed: {e}"
-                    self.logger.warn(err)
-                    if cli:
-                        cli.show_warning(err)
-                    self.disconnect()
+                    cli.show_info("Registering new WARP device with Cloudflare...")
+                cfg = self.register(locations[0] if locations else '')
 
             if cli:
-                cli.show_warning(f"{loc_tag} exhausted, {'trying next...' if loc != locations[-1] else 'all locations failed'}")
+                cli.show_info(f"Starting wireproxy (SOCKS5 :{WP_PORT})...")
+            conf_path = self._write_conf(cfg)
 
-        final = "All locations exhausted — tunnel connection failed"
-        self.logger.warn(final)
+            try:
+                self._process = subprocess.Popen(
+                    [wp, '-c', str(conf_path)],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    cwd=str(self.config_dir)
+                )
+                time.sleep(3)
+                if self._process.poll() is not None:
+                    stderr = self._process.stderr.read().decode(errors='replace')[:300] if self._process.stderr else ''
+                    self.logger.error(f"wireproxy stderr: {stderr}")
+                    raise RuntimeError(f"wireproxy exited immediately: {stderr}")
+
+                self.logger.info("WARP tunnel connected")
+                if cli:
+                    cli.console.print("  [green]WARP tunnel connected (SOCKS5 :{})[/]".format(WP_PORT))
+                        # Show egress info (informational, not blocking)
+                    egress_ip = self._check_egress()
+                    if egress_ip:
+                        loc_name, _ = self._get_ip_location(egress_ip)
+                        cli.console.print(f"  [dim]Egress: {loc_name} ({egress_ip})[/]")
+                return True
+            except Exception as e:
+                err = f"Attempt {attempt+1}/{max_retries} failed: {e}"
+                self.logger.warn(err)
+                if cli:
+                    cli.show_warning(err)
+                self.disconnect()
+
+        self.logger.warn("WARP tunnel connection failed")
         if cli:
-            cli.show_warning(final)
+            cli.show_warning("WARP tunnel connection failed")
         return False
 
     def _check_egress(self):

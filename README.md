@@ -391,11 +391,13 @@ Full reference for `config/config.json`:
 
 ### WARP Tunnel
 
+WARP tunnels via Cloudflare's nearest edge PoP. Egress country is determined by
+Cloudflare, not user-selectable on free tier. For region-unlock, use a proxy.
+
 | Key | Default | Description |
 |-----|---------|-------------|
 | `warp` | `false` | `true` / `false` — Enable built-in WARP tunnel via wireproxy (SOCKS5 :1080) |
-| `warp_location` | `""` | Comma-separated egress regions tried in order: `"us,fr,ja"`. Codes: `us`, `jp`, `gb`, `fr`, `de`, `sg`, `au`, `br`, or `""` (auto). Re-registers until a matching egress is assigned |
-| `warp_retries` | `3` | Retries per location before falling back to next. Increase if you get 429 rate limits |
+| `warp_retries` | `3` | Connection retry count. Increase if you get 429 rate limits |
 
 ### Video
 
