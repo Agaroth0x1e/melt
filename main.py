@@ -5,7 +5,7 @@ import time
 import json
 import subprocess
 
-VERSION = '1.1.0'
+VERSION = '1.2.0'
 
 HELP_TEXT = f"""
 MelT v{VERSION}

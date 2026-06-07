@@ -30,10 +30,26 @@ class Config:
         self.config_path = config_path
         self.config = self.load()
 
+    def _deep_merge(self, base, overlay):
+        changed = False
+        for key, value in overlay.items():
+            if key not in base:
+                base[key] = value
+                changed = True
+            elif isinstance(value, dict) and isinstance(base.get(key), dict):
+                if self._deep_merge(base[key], value):
+                    changed = True
+        return changed
+
     def load(self):
         if os.path.exists(self.config_path):
             with open(self.config_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                loaded = json.load(f)
+            changed = self._deep_merge(loaded, self.defaults())
+            if changed:
+                self.config = loaded
+                self.save()
+            return loaded
 
         bundled = os.path.join(self.bundle_dir, 'config', 'config.json')
         if os.path.exists(bundled):
@@ -69,7 +85,10 @@ class Config:
                 "playlist_folder_template": "%(playlist_title)s",
                 "numbering": False,
                 "duplicate_action": "skip",
+                "archive_action": "skip",
+                "archive_timeout": 10,
                 "cookies_file": "",
+                "cookies_from_browser": "",
                 "rate_limit": "",
                 "exit_on_complete": False,
                 "sponsorblock": True,
@@ -81,7 +100,8 @@ class Config:
                 "extract_flat": {
                     "inspect": True,
                     "search": False
-                }
+                },
+                "proxy": ""
             },
             "video": {
                 "preferred_format": "mp4",
@@ -135,6 +155,12 @@ class Config:
             errors.append("general.default_format must be 'video' or 'audio'")
         if g.get("duplicate_action") not in ("skip", "overwrite", "keep"):
             errors.append("general.duplicate_action must be 'skip', 'overwrite', or 'keep'")
+        archive_action = g.get("archive_action")
+        if archive_action is not None and archive_action not in ("skip", "ask", "redownload"):
+            errors.append("general.archive_action must be 'skip', 'ask', or 'redownload'")
+        archive_timeout = g.get("archive_timeout")
+        if archive_timeout is not None and (not isinstance(archive_timeout, int) or archive_timeout < 1):
+            errors.append("general.archive_timeout must be a positive integer")
         if not isinstance(g.get("clear_temp"), bool):
             errors.append("general.clear_temp must be true/false")
         if not isinstance(g.get("numbering"), bool):

@@ -20,7 +20,7 @@ def test_defaults():
 def test_validate_clean():
     c = _make_config({
         "general": {"max_threads": 3, "timeout_seconds": 5, "default_format": "video",
-                     "duplicate_action": "skip", "clear_temp": True, "numbering": False,
+                     "duplicate_action": "skip", "archive_action": "skip", "clear_temp": True, "numbering": False,
                      "cookies_file": "", "downloads_dir": "downloads", "temp_dir": "temp",
                      "archive_file": "a.txt", "log_file": "l.txt", "failed_file": "f.txt",
                      "filename_template": "%(title)s.%(ext)s", "playlist_folder_template": "%(playlist)s"},

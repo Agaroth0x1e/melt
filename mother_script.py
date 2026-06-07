@@ -251,6 +251,7 @@ class MotherScript:
                         do_numbering = self._prev_settings['numbering']
                         duplicate_action = self._prev_settings['duplicate_action']
                         dry_run = self._prev_settings.get('dry_run', dry_run)
+                        archive_action = self._prev_settings.get('archive_action', self.config['general'].get('archive_action', 'skip'))
                     else:
                         fmt = self.cli.ask_format()
                         dest = self.cli.ask_destination()
@@ -338,7 +339,11 @@ class MotherScript:
                             {'url': url, 'id': info['id'], 'title': info['title']}, dest
                         ))
 
-                options = self._build_options(all_entries, fmt, dest, do_numbering, duplicate_action, dry_run)
+                archive_action = self.config['general'].get('archive_action', 'skip')
+                if self._prev_settings:
+                    archive_action = self._prev_settings.get('archive_action', archive_action)
+
+                options = self._build_options(all_entries, fmt, dest, do_numbering, duplicate_action, dry_run, archive_action)
                 self.cli.show_options_summary(options)
 
                 timeout = self.config['general']['timeout_seconds']
@@ -357,7 +362,7 @@ class MotherScript:
                         if mod_key == 'Items':
                             self.cli.show_info("Enter new URL(s):")
                             break
-                        new_val = self._modify_option(mod_key, fmt, dest, do_numbering, duplicate_action, dry_run)
+                        new_val = self._modify_option(mod_key, fmt, dest, do_numbering, duplicate_action, dry_run, archive_action)
                         if new_val is not None:
                             self.logger.info(f"Modify: {mod_key} -> {new_val}")
                             if mod_key == 'Format':
@@ -368,6 +373,8 @@ class MotherScript:
                                 do_numbering = new_val
                             elif mod_key == 'On Duplicate':
                                 duplicate_action = new_val
+                            elif mod_key == 'Archive Action':
+                                archive_action = new_val
                             elif mod_key == 'Dry Run':
                                 dry_run = new_val
                         continue
@@ -392,9 +399,9 @@ class MotherScript:
                     except Exception:
                         self.cli.show_warning("Could not fetch format preview")
 
-            self._execute_all(all_entries, fmt, threads, do_numbering, duplicate_action, dry_run)
+            self._execute_all(all_entries, fmt, threads, do_numbering, duplicate_action, dry_run, archive_action=archive_action)
 
-            self._save_prev_settings(fmt, dest, do_numbering, duplicate_action, dry_run)
+            self._save_prev_settings(fmt, dest, do_numbering, duplicate_action, dry_run, archive_action)
 
             if self.config['general'].get('exit_on_complete', False):
                 break
@@ -864,13 +871,14 @@ class MotherScript:
                 self.cli.console.print(f"    ... and {len(removed)-5} more")
         return added
 
-    def _save_prev_settings(self, fmt, dest, numbering, dup_action, dry_run):
+    def _save_prev_settings(self, fmt, dest, numbering, dup_action, dry_run, archive_action='skip'):
         self._prev_settings = {
             'fmt': fmt,
             'dest': dest,
             'numbering': numbering,
             'duplicate_action': dup_action,
             'dry_run': dry_run,
+            'archive_action': archive_action,
         }
 
     def _parse_range(self, prange, entries):
@@ -894,7 +902,7 @@ class MotherScript:
                     pass
         return result if result else entries
 
-    def _build_options(self, all_entries, fmt, dest, numbering, dup_action, dry_run=False):
+    def _build_options(self, all_entries, fmt, dest, numbering, dup_action, dry_run=False, archive_action='skip'):
         n = len(all_entries)
         fmt_label = {'video': 'Video', 'audio': 'Audio', 'both': 'Both (Video + Audio)'}.get(fmt, fmt)
         if n <= 8:
@@ -924,10 +932,11 @@ class MotherScript:
             'Destination': dest,
             'Numbering': 'Yes' if numbering else 'No',
             'On Duplicate': dup_action,
+            'Archive Action': archive_action.capitalize(),
             'Dry Run': 'Yes' if dry_run else 'No',
         }
 
-    def _modify_option(self, key, fmt, dest, numbering, dup_action, dry_run=False):
+    def _modify_option(self, key, fmt, dest, numbering, dup_action, dry_run=False, archive_action='skip'):
         if key == 'Format':
             return self.cli.ask_format()
         elif key == 'Destination':
@@ -936,6 +945,8 @@ class MotherScript:
             return not numbering
         elif key == 'On Duplicate':
             return self.cli.ask_duplicate_action()
+        elif key == 'Archive Action':
+            return self.cli.ask_archive_action()
         elif key == 'Dry Run':
             return not dry_run
         return None
@@ -954,7 +965,7 @@ class MotherScript:
         self.cli.console.print(table)
         self.cli.console.print()
 
-    def _execute_all(self, all_entries, fmt, threads, do_numbering, duplicate_action, dry_run=False, resume=False):
+    def _execute_all(self, all_entries, fmt, threads, do_numbering, duplicate_action, dry_run=False, resume=False, archive_action='skip'):
         self.success_count = 0
         self.fail_count = 0
         self.sub_fail_count = 0
@@ -988,7 +999,7 @@ class MotherScript:
             futures = {
                 executor.submit(
                     self._process_single, entry, idx, fmt, entry['dest_abs'], temp_abs,
-                    do_numbering, duplicate_action, total
+                    do_numbering, duplicate_action, total, archive_action
                 ): entry for entry, idx in items
             }
 
@@ -1044,16 +1055,16 @@ class MotherScript:
                     pass
             self.cli.show_info("Temp directory cleared")
 
-    def _process_single(self, entry, idx, fmt, dest_abs, temp_abs, do_numbering, duplicate_action, total):
+    def _process_single(self, entry, idx, fmt, dest_abs, temp_abs, do_numbering, duplicate_action, total, archive_action='skip'):
         if not entry.get('id'):
             info = self.downloader.get_single_entry_fast(entry['url'])
             entry['id'] = info['id']
             entry['title'] = info['title']
             entry['playlist'] = None
         return self._process_single_entry(entry, idx, fmt, dest_abs, temp_abs,
-                                          do_numbering, duplicate_action, total)
+                                          do_numbering, duplicate_action, total, archive_action)
 
-    def _process_single_entry(self, entry, idx, fmt, dest_abs, temp_abs, do_numbering, duplicate_action, total):
+    def _process_single_entry(self, entry, idx, fmt, dest_abs, temp_abs, do_numbering, duplicate_action, total, archive_action='skip'):
         self.cli.show_processing_item(entry['title'], idx, total)
         self.logger.info(f"Starting: {entry['title']}")
 
@@ -1087,6 +1098,31 @@ class MotherScript:
             self.skip_count += 1
             shutil.rmtree(job_dir, ignore_errors=True)
             return 'skip'
+
+        if archive_action != 'redownload' and entry.get('id') and self.archive.is_downloaded(entry['id']):
+            if not os.path.exists(final_path):
+                if archive_action == 'ask':
+                    title_short = entry.get('title', entry['id'])[:60]
+                    self.cli.show_info(f"Video already in archive (file not found at destination):")
+                    self.cli.show_info(f"  - {title_short}")
+                    while True:
+                        choice = self.cli.console.input("[bold yellow]Redownload this video?[/] (y/N): ").strip().lower()
+                        if choice in ('y', 'yes'):
+                            break
+                        if choice in ('', 'n', 'no'):
+                            self.skipped.record(entry, '(archive)', fmt)
+                            self.logger.info(f"Skipped (archive): title={entry['title']}, id={entry['id']}")
+                            self.skip_count += 1
+                            shutil.rmtree(job_dir, ignore_errors=True)
+                            return 'skip'
+                else:
+                    title_short = entry.get('title', entry['id'])[:60]
+                    self.cli.show_info(f"[{idx}/{total}] Skipping (already in archive): {title_short}")
+                    self.skipped.record(entry, '(archive)', fmt)
+                    self.logger.info(f"Skipped (archive): title={entry['title']}, id={entry['id']}")
+                    self.skip_count += 1
+                    shutil.rmtree(job_dir, ignore_errors=True)
+                    return 'skip'
 
         try:
             if entry_fmt == 'video':

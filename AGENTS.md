@@ -2,11 +2,11 @@
 
 ## Identity
 - Project: **MelT** — Python CLI tool for downloading YouTube video/audio/subtitles
-- PyPI: `meltdl` v1.1.0 (note: `melt` and `melty` were taken)
+- PyPI: `meltdl` v1.2.0 (note: `melt` and `melty` were taken)
 - GitHub: `Agaroth0x1e/melt` (note: repo name is `melt`, NOT `YT-DL`)
 - License: MIT
 - Local path: `C:\Users\USER\Documents\Projects\MelT`
-- Entry point: `main.py` (VERSION = '1.1.0')
+- Entry point: `main.py` (VERSION = '1.2.0')
 - Orchestrator: `mother_script.py`
 
 ## What Is Here
@@ -112,7 +112,7 @@ All source files are directly in the project root:
 - **Default destination:** auto-splits into `downloads/videos/` or `downloads/audio/` (only when dest matches config's `downloads_dir` and format != 'both')
 - **Timeout:** auto-starts only when no key is pressed; Windows uses `msvcrt.kbhit()`, Unix/Mac uses `select.select()`; `-1` = no timeout
 - **Logging:** all user actions logged to `logs/log.txt` (menu choices, search queries, URL entries, option modifications, sub-menu actions, download results, exits)
-- **Banner:** minimalist — just `MelT` + `v1.1.0` in a small bordered box
+- **Banner:** minimalist — just `MelT` + `v1.2.0` in a small bordered box
 - **Resume:** `--resume` flag loads `_resume_queue.json` from config working dir
 
 ### Bundling
@@ -122,11 +122,15 @@ All source files are directly in the project root:
 - `find_ffmpeg()`: when bundled, checks `_bundle_dir()/ffmpeg.exe` → `_exe_dir()/ffmpeg.exe` → system PATH
 - `os.environ['FFMPEG_PATH']` only set in standalone builds
 
-### v1.1.0 — Shipped ✅
+### v1.2.0 — Current ✅
+
+(Features added: `archive_action`, `archive_timeout` config, `_deep_merge` config migration, removed GitHub public proxy list)
 - Feature-complete per original plan
-- Published to PyPI: `meltdl` v1.1.0
+- Published to PyPI: `meltdl` v1.2.0
 - GitHub release with 3 platform binaries: `melt.exe` (Win), `melt-linux` (Linux), `melt-macos` (macOS CLI binary, no `.dmg`)
 - macOS CLI tool ships as a plain binary (no extension) — standard for CLI tools on macOS; `.dmg` is for GUI `.app` bundles
+- **`archive_action`** config (`skip`/`ask`/`redownload`, default `skip`): per-item check when video ID is in archive.txt but file is missing from disk; `skip` auto-skips after `archive_timeout` seconds (default 10)
+- **`_deep_merge`** in `Config.load()` auto-fills missing config keys from defaults when loading existing config files
 
 ### Build Workflow
 - `.github/workflows/build.yml` triggers on `workflow_dispatch` (with `tag` input) or `release: [published]`

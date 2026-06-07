@@ -117,6 +117,17 @@ class CLI:
             return result.lower().strip()
         return 'skip'
 
+    def ask_archive_action(self):
+        timeout = self.config['general']['timeout_seconds']
+        result = timed_prompt(
+            "[bold yellow]Archive action[/] (skip/ask/redownload) [bold](default: skip)[/]: ",
+            timeout, 'skip'
+        )
+        val = result.lower().strip()
+        if val in ('skip', 'ask', 'redownload'):
+            return val
+        return 'skip'
+
     def ask_destination(self):
         timeout = self.config['general']['timeout_seconds']
         default = self.config['general']['downloads_dir']

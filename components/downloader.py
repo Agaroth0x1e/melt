@@ -12,6 +12,8 @@ class YtdlpLogger:
 
 
 class Downloader:
+    _proxy_cache = None
+
     def __init__(self, config, logger):
         self.config = config
         self.logger = logger
@@ -174,6 +176,8 @@ class Downloader:
     def fetch_formats(self, url):
         opts = {'quiet': True, 'no_warnings': True, 'skip_download': True}
         opts.update(self._cookies_opts())
+        opts.update(self._cookies_from_browser_opts())
+        opts.update(self._proxy_opts())
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
         raw = info.get('formats', [])
@@ -283,6 +287,12 @@ class Downloader:
                 return {'cookiefile': cf_path}
         return {}
 
+    def _cookies_from_browser_opts(self):
+        browser = self.config['general'].get('cookies_from_browser', '')
+        if browser:
+            return {'cookiesfrombrowser': (browser,)}
+        return {}
+
     def _rate_limit_opts(self):
         val = self.config['general'].get('rate_limit', '')
         if val:
@@ -299,6 +309,77 @@ class Downloader:
         if path:
             return {'ffmpeg_location': path}
         return {}
+
+    def _proxy_opts(self):
+        proxy_setting = self.config['general'].get('proxy', '')
+        if proxy_setting and proxy_setting != 'auto':
+            return {'proxy': proxy_setting}
+        if proxy_setting == 'auto':
+            found = self._detect_proxy()
+            if found:
+                self.logger.info(f"Auto-detected proxy: {found}")
+                self.config['general']['proxy'] = found
+                return {'proxy': found}
+        return {}
+
+    def _detect_proxy(self):
+        if Downloader._proxy_cache is not None:
+            return Downloader._proxy_cache
+        candidates = []
+
+        sys_proxy = self._get_system_proxy()
+        if sys_proxy:
+            candidates.append(sys_proxy)
+
+        common_ports = [1080, 9050, 8118, 8080, 3128]
+        for port in common_ports:
+            candidates.append(('socks5', '127.0.0.1', port))
+            candidates.append(('http', '127.0.0.1', port))
+
+        seen = set()
+        for scheme, host, port in candidates:
+            key = (scheme, host, port)
+            if key in seen:
+                continue
+            seen.add(key)
+            if self._test_proxy(scheme, host, port):
+                result = f"{scheme}://{host}:{port}"
+                Downloader._proxy_cache = result
+                self.logger.info(f"Proxy auto-detected locally: {result}")
+                return result
+
+        Downloader._proxy_cache = False
+        return None
+
+    @staticmethod
+    def _get_system_proxy():
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                                r'Software\Microsoft\Windows\CurrentVersion\Internet Settings') as key:
+                enabled, _ = winreg.QueryValueEx(key, 'ProxyEnable')
+                if enabled:
+                    server, _ = winreg.QueryValueEx(key, 'ProxyServer')
+                    if server:
+                        parts = server.split(':')
+                        host = parts[0]
+                        port = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 8080
+                        return ('http', host, port)
+        except Exception:
+            pass
+        return None
+
+    @staticmethod
+    def _test_proxy(scheme, host, port, timeout=2):
+        try:
+            import urllib.request
+            proxy_url = f"{scheme}://{host}:{port}"
+            proxy_hdlr = urllib.request.ProxyHandler({scheme: proxy_url})
+            opener = urllib.request.build_opener(proxy_hdlr)
+            opener.open('https://www.google.com', timeout=timeout)
+            return True
+        except Exception:
+            return False
 
     def download_video(self, entry, job_dir, fmt_override=None):
         work_dir = self._resolve(job_dir)
@@ -322,9 +403,11 @@ class Downloader:
                 'postprocessors': [{'key': 'EmbedThumbnail'}],
             }
             v_opts.update(self._cookies_opts())
+            v_opts.update(self._cookies_from_browser_opts())
             v_opts.update(self._rate_limit_opts())
             v_opts.update(self._sponsorblock_opts())
             v_opts.update(self._ffmpeg_location_opts())
+            v_opts.update(self._proxy_opts())
 
             self.logger.info(f"Downloading video stream (merge mode): {entry['title']}")
             with yt_dlp.YoutubeDL(v_opts) as ydl:
@@ -347,9 +430,11 @@ class Downloader:
                 'progress_hooks': [self._progress_hook],
             }
             a_opts.update(self._cookies_opts())
+            a_opts.update(self._cookies_from_browser_opts())
             a_opts.update(self._rate_limit_opts())
             a_opts.update(self._sponsorblock_opts())
             a_opts.update(self._ffmpeg_location_opts())
+            a_opts.update(self._proxy_opts())
 
             self.logger.info(f"Downloading audio stream (merge mode): {entry['title']}")
             with yt_dlp.YoutubeDL(a_opts) as ydl:
@@ -380,9 +465,11 @@ class Downloader:
             'postprocessors': [{'key': 'EmbedThumbnail'}],
         }
         ydl_opts.update(self._cookies_opts())
+        ydl_opts.update(self._cookies_from_browser_opts())
         ydl_opts.update(self._rate_limit_opts())
         ydl_opts.update(self._sponsorblock_opts())
         ydl_opts.update(self._ffmpeg_location_opts())
+        ydl_opts.update(self._proxy_opts())
 
         self.logger.info(f"Downloading video: {entry['title']}")
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -419,9 +506,11 @@ class Downloader:
         }
 
         ydl_opts.update(self._cookies_opts())
+        ydl_opts.update(self._cookies_from_browser_opts())
         ydl_opts.update(self._rate_limit_opts())
         ydl_opts.update(self._sponsorblock_opts())
         ydl_opts.update(self._ffmpeg_location_opts())
+        ydl_opts.update(self._proxy_opts())
 
         self.logger.info(f"Downloading audio: {entry['title']}")
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -454,7 +543,9 @@ class Downloader:
         }
 
         ydl_opts.update(self._cookies_opts())
+        ydl_opts.update(self._cookies_from_browser_opts())
         ydl_opts.update(self._ffmpeg_location_opts())
+        ydl_opts.update(self._proxy_opts())
 
         self.logger.info(f"Downloading subtitles for: {entry['title']}")
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
