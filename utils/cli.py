@@ -61,7 +61,7 @@ class CLI:
         self.console.print()
 
     def ask_url(self):
-        return console.input("[bold yellow]Enter YouTube URL or URLs[/]: ").strip()
+        return self.timed_input("[bold yellow]Enter YouTube URL or URLs[/]: ")
 
     def ask_reuse_settings(self, prev):
         self.console.print("\n[bold]Previous session settings:[/]")
@@ -71,7 +71,7 @@ class CLI:
         self.console.print(f"  [cyan]Numbering:[/]     {'Yes' if prev.get('numbering') else 'No'}")
         self.console.print(f"  [cyan]On Duplicate:[/]  {prev.get('duplicate_action', 'skip')}")
         self.console.print(f"  [cyan]Dry Run:[/]       {'Yes' if prev.get('dry_run') else 'No'}")
-        timeout = self.config['network']['timeout_seconds']
+        timeout = self.config['general'].get('prompt_timeout', 30)
         default_reuse = self.config['general'].get('default_reuse', True)
         default_ans = 'yes' if default_reuse else 'no'
         result = timed_prompt(
@@ -89,7 +89,7 @@ class CLI:
         return 'yes'
 
     def ask_format(self):
-        timeout = self.config['network']['timeout_seconds']
+        timeout = self.config['general'].get('prompt_timeout', 30)
         default = self.config['download']['default_format']
         mapping = {'1': 'video', '2': 'audio', '3': 'both'}
         def_key = {'video': '1', 'audio': '2', 'both': '3'}.get(default, '1')
@@ -100,7 +100,7 @@ class CLI:
         return mapping.get(result.strip(), default)
 
     def ask_playlist_range(self, total, identifier=None):
-        timeout = self.config['network']['timeout_seconds']
+        timeout = self.config['general'].get('prompt_timeout', 30)
         label = f" for \"{identifier}\"" if identifier else ""
         result = timed_prompt(
             f"[bold yellow]Playlist range{label}[/] (e.g. 1-5, 1,3,5 or 'all') [bold](default: all)[/]: ",
@@ -109,7 +109,7 @@ class CLI:
         return result if result else 'all'
 
     def ask_duplicate_action(self):
-        timeout = self.config['network']['timeout_seconds']
+        timeout = self.config['general'].get('prompt_timeout', 30)
         result = timed_prompt(
             "[bold yellow]On duplicate[/] (keep/overwrite/skip) [bold](default: skip)[/]: ",
             timeout, 'skip'
@@ -119,7 +119,7 @@ class CLI:
         return 'skip'
 
     def ask_archive_action(self):
-        timeout = self.config['network']['timeout_seconds']
+        timeout = self.config['general'].get('prompt_timeout', 30)
         result = timed_prompt(
             "[bold yellow]Archive action[/] (skip/ask/redownload) [bold](default: skip)[/]: ",
             timeout, 'skip'
@@ -130,7 +130,7 @@ class CLI:
         return 'skip'
 
     def ask_destination(self):
-        timeout = self.config['network']['timeout_seconds']
+        timeout = self.config['general'].get('prompt_timeout', 30)
         default = self.config['paths']['downloads_dir']
         result = timed_prompt(
             f"[bold yellow]Destination folder[/] [bold](default: {default})[/]: ",
@@ -162,8 +162,8 @@ class CLI:
             size_str = f"{size / 1048576:.1f} MB" if size else "~"
             table.add_row(fmt_id, ext, typ, quality, codec, size_str)
         self.console.print(table)
-        choice = console.input("[bold yellow]Enter format ID to use[/] (or press Enter for auto): ")
-        return choice.strip() if choice.strip() else None
+        choice = self.timed_input("[bold yellow]Enter format ID to use[/] (or press Enter for auto): ")
+        return choice if choice else None
 
     def show_start_prompt(self, timeout, force_modify=False):
         if force_modify:
@@ -264,7 +264,7 @@ class CLI:
             table.add_row("q", "Exit", "Quit MelT")
             self.console.print(table)
             self.console.print()
-        return console.input("[bold yellow]Choose an option[/]: ").strip().lower()
+        return self.timed_input("[bold yellow]Choose an option[/]: ").lower()
 
     def show_schedule_menu(self):
         self.console.print("[bold cyan]Scheduled Downloads[/]")
@@ -277,7 +277,7 @@ class CLI:
         t.add_row("4", "Start scheduler daemon")
         t.add_row("b", "Back to main menu")
         self.console.print(t)
-        return console.input("[bold yellow]Schedule option[/] (default: b): ").strip().lower() or 'b'
+        return self.timed_input("[bold yellow]Schedule option[/] (default: b): ").lower() or 'b'
 
     def show_rules_menu(self):
         self.console.print("[bold cyan]Auto-Rules[/]")
@@ -289,7 +289,7 @@ class CLI:
         t.add_row("3", "Remove a rule")
         t.add_row("b", "Back to main menu")
         self.console.print(t)
-        return console.input("[bold yellow]Rules option[/] (default: b): ").strip().lower() or 'b'
+        return self.timed_input("[bold yellow]Rules option[/] (default: b): ").lower() or 'b'
 
     def show_sync_menu(self):
         self.console.print("[bold cyan]Cloud Sync[/]")
@@ -302,9 +302,19 @@ class CLI:
         t.add_row("4", "Show status")
         t.add_row("b", "Back to main menu")
         self.console.print(t)
-        return console.input("[bold yellow]Sync option[/] (default: b): ").strip().lower() or 'b'
+        return self.timed_input("[bold yellow]Sync option[/] (default: b): ").lower() or 'b'
+
+    def _prompt_timeout(self):
+        return self.config['general'].get('prompt_timeout', 30)
+
+    def timed_input(self, prompt_text, default=''):
+        return timed_prompt(prompt_text, self._prompt_timeout(), default)
+
+    def press_enter(self, prompt="Press Enter to continue..."):
+        self.timed_input(f"[bold yellow]{prompt}[/]", 'continue')
+        self.console.print()
 
     def ask_continue(self):
-        return console.input(
+        return self.timed_input(
             "[bold yellow]Enter URLs to download more, or type 'exit' to quit, or 'menu' for main menu[/]: "
-        ).strip()
+        )

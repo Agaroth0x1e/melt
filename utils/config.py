@@ -68,7 +68,7 @@ class Config:
             cfg.setdefault('network', {})['warp'] = general['warp'] in ('auto', True, 'true', 'on')
             changes = True
 
-        keep = ['clear_temp', 'exit_on_complete', 'enable_sounds', 'default_reuse', 'dry_run']
+        keep = ['clear_temp', 'exit_on_complete', 'enable_sounds', 'default_reuse', 'dry_run', 'prompt_timeout']
         new_general = {}
         for k in keep:
             if k in general:
@@ -117,6 +117,7 @@ class Config:
                 "exit_on_complete": False,
                 "enable_sounds": True,
                 "default_reuse": True,
+                "prompt_timeout": 30,
             },
             "paths": {
                 "temp_dir": "temp",
@@ -229,6 +230,9 @@ class Config:
             errors.append("general.enable_sounds must be true/false")
         if not isinstance(g.get("default_reuse", True), bool):
             errors.append("general.default_reuse must be true/false")
+        prompt_timeout = g.get("prompt_timeout", 30)
+        if not isinstance(prompt_timeout, int) or prompt_timeout < -1 or prompt_timeout == 0:
+            errors.append("general.prompt_timeout must be a positive integer, or -1 for no timeout")
         if not isinstance(d.get("format_preview", False), bool):
             errors.append("download.format_preview must be true/false")
         if not isinstance(d.get("merge_mode", False), bool):

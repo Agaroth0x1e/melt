@@ -514,7 +514,7 @@ class MotherScript:
                 continue
 
             elif choice == '2':
-                query = self.cli.console.input("[bold yellow]Search YouTube:[/] ").strip()
+                query = self.cli.timed_input("[bold yellow]Search YouTube:[/] ")
                 if not query:
                     continue
                 self.logger.info(f"Search query: {query}")
@@ -562,7 +562,7 @@ class MotherScript:
                 if self.config['network'].get('warp', False) and not wm.is_connected():
                     self._connect_warp()
                 wm.show_public_ip(self.cli)
-                input("Press Enter to continue...")
+                self.cli.press_enter()
                 continue
 
             elif choice in ('w', 'warp'):
@@ -573,7 +573,7 @@ class MotherScript:
                 else:
                     self._connect_warp(force=True)
                 self.logger.info(f"WARP toggled: connected={wm.is_connected()}")
-                input("Press Enter to continue...")
+                self.cli.press_enter()
                 continue
 
             elif choice in ('q', 'quit', 'exit', '0'):
@@ -668,7 +668,7 @@ class MotherScript:
                 table.add_row(str(i), etype, e.get('title', '?')[:55], e.get('uploader', '?')[:22], rdate, dur_str, views_str)
             self.cli.console.print(table)
 
-            choice = self.cli.console.input(f"\n[bold yellow]Enter numbers to download[/] [dim](e.g. 1,3,5-8)[/], [bold]'all'[/] for all, [bold]'more'[/] for next {total_wanted}, or [bold]Enter[/] to cancel: ").strip().lower()
+            choice = self.cli.timed_input(f"\n[bold yellow]Enter numbers to download[/] [dim](e.g. 1,3,5-8)[/], [bold]'all'[/] for all, [bold]'more'[/] for next {total_wanted}, or [bold]Enter[/] to cancel: ").lower()
             if not choice:
                 return
             if choice == 'more':
@@ -710,7 +710,7 @@ class MotherScript:
     def _run_analytics(self):
         from utils.stats import show_analytics
         show_analytics(self.config.resolve_path(os.path.join('logs', 'stats.json')))
-        input("\nPress Enter to return to menu...")
+        self.cli.press_enter("Press Enter to return to menu...")
 
     def _run_dashboard(self):
         from utils.tui import run_dashboard
@@ -732,20 +732,20 @@ class MotherScript:
                         next_dt = j.get('next_run', 'never')
                         last_dt = j.get('last_run', 'never')
                         self.cli.console.print(f"  [{j['id']}] {enabled} | {j['url'][:60]} | next: {next_dt}")
-                input("\nPress Enter...")
+                self.cli.press_enter("Press Enter...")
             elif s_choice == '2':
-                url = input("URL: ").strip()
+                url = self.cli.timed_input("[bold]URL[/]: ")
                 if not url:
                     continue
-                interval = input("Interval in hours (0 for one-time): ").strip()
+                interval = self.cli.timed_input("[bold]Interval in hours[/] (0 for one-time): ", '0')
                 interval = int(interval) if interval.isdigit() else 0
-                fmt = input("Format (video/audio/both) [default: video]: ").strip() or 'video'
-                dest = input("Destination [default: downloads]: ").strip() or 'downloads'
+                fmt = self.cli.timed_input("[bold]Format[/] (video/audio/both) [default: video]: ", 'video')
+                dest = self.cli.timed_input("[bold]Destination[/] [default: downloads]: ", 'downloads')
                 jid = sch.add(url, interval, '', fmt, dest)
                 self.logger.info(f"Schedule job added: {jid} -> {url[:60]}, every {interval}h, fmt={fmt}")
                 self.cli.show_info(f"Scheduled job {jid} added")
             elif s_choice == '3':
-                jid = input("Job ID to remove: ").strip()
+                jid = self.cli.timed_input("[bold]Job ID to remove[/]: ")
                 if sch.remove(jid):
                     self.logger.info(f"Schedule job removed: {jid}")
                     self.cli.show_info(f"Removed job {jid}")
@@ -790,28 +790,28 @@ class MotherScript:
                         if a.get('fmt'): a_desc.append(f"fmt={a['fmt']}")
                         if a.get('dest'): a_desc.append(f"dest={a['dest']}")
                         self.cli.console.print(f"  [{r['id']}] {', '.join(desc)} -> {', '.join(a_desc)}")
-                input("\nPress Enter...")
+                self.cli.press_enter("Press Enter...")
             elif r_choice == '2':
                 match = {}
                 action = {}
-                kw = input("Keyword to match (or Enter to skip): ").strip()
+                kw = self.cli.timed_input("[bold]Keyword to match[/] (or Enter to skip): ")
                 if kw: match['keyword'] = kw
-                ch = input("Channel name to match (or Enter to skip): ").strip()
+                ch = self.cli.timed_input("[bold]Channel name to match[/] (or Enter to skip): ")
                 if ch: match['channel'] = ch
-                urlp = input("URL pattern to match (or Enter to skip): ").strip()
+                urlp = self.cli.timed_input("[bold]URL pattern to match[/] (or Enter to skip): ")
                 if urlp: match['url_pattern'] = urlp
                 if not match:
                     self.cli.show_warning("At least one match criteria required")
                     continue
-                fmt = input("Format to apply (video/audio/both) [Enter to skip]: ").strip()
+                fmt = self.cli.timed_input("[bold]Format to apply[/] (video/audio/both) [Enter to skip]: ")
                 if fmt: action['fmt'] = fmt
-                dest = input("Destination to apply [Enter to skip]: ").strip()
+                dest = self.cli.timed_input("[bold]Destination to apply[/] [Enter to skip]: ")
                 if dest: action['dest'] = dest
                 rid = rm.add(match, action)
                 self.logger.info(f"Rule added: {rid} -> match={match}, action={action}")
                 self.cli.show_info(f"Rule {rid} added")
             elif r_choice == '3':
-                rid = input("Rule ID to remove: ").strip()
+                rid = self.cli.timed_input("[bold]Rule ID to remove[/]: ")
                 if rm.remove(rid):
                     self.logger.info(f"Rule removed: {rid}")
                     self.cli.show_info(f"Rule {rid} removed")
@@ -832,29 +832,29 @@ class MotherScript:
             sy_choice = self.cli.show_sync_menu()
             self.logger.info(f"Sync menu choice: {sy_choice}")
             if sy_choice == '1':
-                remote = input("Remote URL (or Enter for local only): ").strip()
+                remote = self.cli.timed_input("[bold]Remote URL[/] (or Enter for local only): ")
                 result = sm.init(remote)
                 self.logger.info(f"Sync init: {result}")
                 self.cli.console.print(result)
-                input("\nPress Enter...")
+                self.cli.press_enter("Press Enter...")
             elif sy_choice == '2':
-                msg = input("Commit message [Enter for auto]: ").strip()
+                msg = self.cli.timed_input("[bold]Commit message[/] [Enter for auto]: ")
                 result = sm.push(msg)
                 self.logger.info(f"Sync push: {result}")
                 self.cli.console.print(result)
-                input("\nPress Enter...")
+                self.cli.press_enter("Press Enter...")
             elif sy_choice == '3':
                 result = sm.pull()
                 self.logger.info(f"Sync pull: {result}")
                 self.cli.console.print(result)
-                input("\nPress Enter...")
+                self.cli.press_enter("Press Enter...")
             elif sy_choice == '4':
                 st = sm.status()
                 rs = sm.remote_status()
                 self.cli.console.print(st)
                 self.cli.console.print()
                 self.cli.console.print(rs)
-                input("\nPress Enter...")
+                self.cli.press_enter("Press Enter...")
             elif sy_choice in ('b', 'back', 'q', 'quit'):
                 break
 
@@ -1196,7 +1196,7 @@ class MotherScript:
                     self.cli.console.print(f"[yellow]Video already in archive (file not found at destination):[/]")
                     self.cli.console.print(f"  [dim]- {title_short}[/]")
                     while True:
-                        choice = self.cli.console.input("[bold yellow]Redownload this video?[/] (y/N): ").strip().lower()
+                        choice = self.cli.timed_input("[bold yellow]Redownload this video?[/] (y/N): ").lower()
                         if choice in ('y', 'yes'):
                             break
                         if choice in ('', 'n', 'no'):
