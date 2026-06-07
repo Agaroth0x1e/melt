@@ -17,7 +17,7 @@ def timed_prompt(prompt_text, timeout, default):
     sys.stderr.flush()
     sys.stdout.flush()
 
-    if timeout < 0:
+    if timeout < 0 or not default:
         line = input()
         return line.strip() if line.strip() else default
 
