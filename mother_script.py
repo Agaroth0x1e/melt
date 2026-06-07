@@ -271,15 +271,17 @@ class MotherScript:
             return False
         wm = self._ensure_warp()
         location = self.config['network'].get('warp_location', '')
-        if wm.load_config() is None:
-            self.cli.show_info("Registering WARP device...")
-            wm.register(location)
-        self.cli.show_info("Connecting WARP tunnel...")
-        if wm.connect(location):
-            self.cli.show_info("WARP tunnel connected")
-            return True
-        self.cli.show_warning("WARP tunnel failed to connect")
-        return False
+        loc_str = f" ({location.upper()})" if location else ""
+        self.cli.console.print(f"  Connecting to WARP tunnel{loc_str}...")
+        self.logger.info(f"Connecting WARP tunnel (location={location or 'auto'})...")
+        ok = wm.connect(location, self.cli)
+        if ok:
+            self.cli.console.print("  [green]Connected to tunnel[/]")
+            self.logger.info("Tunnel connected")
+        else:
+            self.cli.console.print("  [red]Tunnel connection failed[/]")
+            self.logger.info("Tunnel connection failed")
+        return ok
 
     def _disconnect_warp(self):
         if self._warp_manager and self._warp_manager.is_connected():
@@ -580,14 +582,10 @@ class MotherScript:
                 wm = self._ensure_warp()
                 if wm.is_connected():
                     self._disconnect_warp()
-                    self.cli.show_info("Disconnected from tunnel")
+                    self.cli.console.print("  [yellow]Disconnected from tunnel[/]")
                     self.logger.info("Tunnel disconnected")
                 else:
-                    if self._connect_warp(force=True):
-                        self.cli.show_info("Connected to tunnel")
-                        self.logger.info("Tunnel connected")
-                    else:
-                        self.logger.info("Tunnel connection failed")
+                    self._connect_warp(force=True)
                 self.cli.press_enter()
                 continue
 
