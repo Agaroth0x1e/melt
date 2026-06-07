@@ -48,8 +48,8 @@ class FolderWatcher:
         self._path = config.resolve_path(watch_cfg.get('path', 'watch'))
         self._interval = watch_cfg.get('interval_seconds', 60)
         self._auto_delete = watch_cfg.get('auto_delete', True)
-        wf = watch_cfg.get('default_format', config.get('general', {}).get('default_format', 'video'))
-        wd = watch_cfg.get('default_dest', config.get('general', {}).get('downloads_dir', 'downloads'))
+        wf = watch_cfg.get('default_format', config.get('download', {}).get('default_format', 'video'))
+        wd = watch_cfg.get('default_dest', config.get('paths', {}).get('downloads_dir', 'downloads'))
         self._watch_fmt = wf
         self._watch_dest = wd
 

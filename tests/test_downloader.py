@@ -4,7 +4,9 @@ from components.downloader import Downloader
 class FakeConfig:
     def __init__(self):
         self.data = {
-            "general": {"cookies_file": "", "filename_template": "%(title)s.%(ext)s"},
+            "general": {},
+            "network": {"cookies_file": "", "cookies_from_browser": ""},
+            "download": {"filename_template": "%(title)s.%(ext)s", "merge_mode": False, "sponsorblock": True},
             "video": {"preferred_format": "mp4", "quality_priority": ["480", "360"], "preferred_codec": "h264"},
             "audio": {"preferred_format": "m4a", "quality_priority": ["128", "192"], "default_quality": 128},
             "subtitle": {"language": "en", "preferred_format": "srt"},
@@ -25,7 +27,7 @@ def test_cookies_opts_empty():
 def test_cookies_opts_with_file():
     cfg = FakeConfig()
     _, cf = tempfile.mkstemp()
-    cfg.data["general"]["cookies_file"] = cf
+    cfg.data["network"]["cookies_file"] = cf
     d = Downloader(cfg, FakeLogger())
     opts = d._cookies_opts()
     assert "cookiefile" in opts

@@ -71,7 +71,7 @@ class CLI:
         self.console.print(f"  [cyan]Numbering:[/]     {'Yes' if prev.get('numbering') else 'No'}")
         self.console.print(f"  [cyan]On Duplicate:[/]  {prev.get('duplicate_action', 'skip')}")
         self.console.print(f"  [cyan]Dry Run:[/]       {'Yes' if prev.get('dry_run') else 'No'}")
-        timeout = self.config['general']['timeout_seconds']
+        timeout = self.config['network']['timeout_seconds']
         default_reuse = self.config['general'].get('default_reuse', True)
         default_ans = 'yes' if default_reuse else 'no'
         result = timed_prompt(
@@ -89,8 +89,8 @@ class CLI:
         return 'yes'
 
     def ask_format(self):
-        timeout = self.config['general']['timeout_seconds']
-        default = self.config['general']['default_format']
+        timeout = self.config['network']['timeout_seconds']
+        default = self.config['download']['default_format']
         mapping = {'1': 'video', '2': 'audio', '3': 'both'}
         def_key = {'video': '1', 'audio': '2', 'both': '3'}.get(default, '1')
         result = timed_prompt(
@@ -100,7 +100,7 @@ class CLI:
         return mapping.get(result.strip(), default)
 
     def ask_playlist_range(self, total, identifier=None):
-        timeout = self.config['general']['timeout_seconds']
+        timeout = self.config['network']['timeout_seconds']
         label = f" for \"{identifier}\"" if identifier else ""
         result = timed_prompt(
             f"[bold yellow]Playlist range{label}[/] (e.g. 1-5, 1,3,5 or 'all') [bold](default: all)[/]: ",
@@ -109,7 +109,7 @@ class CLI:
         return result if result else 'all'
 
     def ask_duplicate_action(self):
-        timeout = self.config['general']['timeout_seconds']
+        timeout = self.config['network']['timeout_seconds']
         result = timed_prompt(
             "[bold yellow]On duplicate[/] (keep/overwrite/skip) [bold](default: skip)[/]: ",
             timeout, 'skip'
@@ -119,7 +119,7 @@ class CLI:
         return 'skip'
 
     def ask_archive_action(self):
-        timeout = self.config['general']['timeout_seconds']
+        timeout = self.config['network']['timeout_seconds']
         result = timed_prompt(
             "[bold yellow]Archive action[/] (skip/ask/redownload) [bold](default: skip)[/]: ",
             timeout, 'skip'
@@ -130,8 +130,8 @@ class CLI:
         return 'skip'
 
     def ask_destination(self):
-        timeout = self.config['general']['timeout_seconds']
-        default = self.config['general']['downloads_dir']
+        timeout = self.config['network']['timeout_seconds']
+        default = self.config['paths']['downloads_dir']
         result = timed_prompt(
             f"[bold yellow]Destination folder[/] [bold](default: {default})[/]: ",
             timeout, default
@@ -200,7 +200,7 @@ class CLI:
         self.console.print(f"[yellow]WARN[/] {message}")
 
     def show_info(self, message):
-        self.console.print(f"[blue]INFO[/] {message}")
+        print(f"\r\033[94mINFO\033[0m {message}", flush=True)
 
     def show_completion(self, success_count, fail_count, dest, log_path, failed_path, sub_fail_count=0, elapsed=0, skip_count=0, skipped_path=None):
         self.console.print()
@@ -259,6 +259,8 @@ class CLI:
             table.add_row("7", "Watch Folder", "Start folder watcher")
             table.add_row("8", "Cloud Sync", "Sync config via git")
             table.add_row("9", "Show Help", "Inline help")
+            table.add_row("i", "My IP", "Check public IP (test WARP)")
+            table.add_row("w", "WARP", "Connect / Disconnect WARP tunnel")
             table.add_row("q", "Exit", "Quit MelT")
             self.console.print(table)
             self.console.print()

@@ -80,12 +80,13 @@ Press `m` at the start prompt to change any option before downloading:
 ```
 Select option to modify:
   [1] Items
-  [2] Format
+  [2] Format              (video / audio / both)
   [3] Destination
-  [4] Numbering
-  [5] On Duplicate
-  [6] Dry Run
-  [7] Start download
+  [4] Numbering           (toggle on/off)
+  [5] On Duplicate        (skip / overwrite / keep)
+  [6] Archive Action      (skip / ask / redownload)
+  [7] Dry Run             (toggle on/off)
+  [8] Start download
 ```
 
 ### Dry Run
@@ -118,13 +119,23 @@ Set `"format_preview": true` in `config/config.json`. Zero cost when disabled.
 
 Configure `max_threads` in config. Multiple downloads run simultaneously.
 
-### Duplicate Handling
+### Duplicate Handling (`duplicate_action`)
 
 | Setting | Behavior |
 |---------|----------|
-| `skip` | Skip if file exists, log to `logs/skipped.txt` |
+| `skip` | Skip if file exists at destination, log to `logs/skipped.txt` |
 | `overwrite` | Overwrite existing file |
 | `keep` | Append counter (`file_1.mp4`, `file_2.mp4`) |
+
+### Archive Handling (`archive_action`)
+
+Check is per-item, after duplicate check. Only applies when file is **missing** from disk but its ID is in `archive.txt` (e.g. user deleted the file but archive still has the record).
+
+| Setting | Behavior |
+|---------|----------|
+| `skip` | Auto-skip after `archive_timeout` seconds (default 10). Press `r` to redownload |
+| `ask` | Always prompt — no timeout, waits for Yes/No |
+| `redownload` | Ignore archive, always download |
 
 ### Subtitle Cleaning
 
@@ -357,46 +368,51 @@ Full reference for `config/config.json`:
 | Key | Default | Description |
 |-----|---------|-------------|
 | `max_threads` | `3` | Parallel download threads |
-| `default_format` | `"video"` | `"video"`, `"audio"`, or `"both"` |
-| `clear_temp` | `true` | Delete temp files after download |
-| `numbering` | `false` | Prepend index to filenames |
-| `duplicate_action` | `"skip"` | `"skip"`, `"overwrite"`, `"keep"` |
-| `sponsorblock` | `true` | Skip sponsored segments |
-| `exit_on_complete` | `false` | Exit after download or loop back |
-| `default_reuse` | `true` | Default to reuse previous settings |
-| `reverse_playlist` | `false` | Process newest-first |
+| `default_format` | `"video"` | `"video"`, `"audio"`, `"both"` |
+| `clear_temp` | `true` | `true` / `false` |
+| `numbering` | `false` | `true` / `false` |
+| `duplicate_action` | `"skip"` | `"skip"` / `"overwrite"` / `"keep"` |
+| `archive_action` | `"skip"` | `"skip"` (auto-skip after timeout) / `"ask"` (always prompt) / `"redownload"` (ignore archive) |
+| `archive_timeout` | `10` | Seconds before auto-skip archived videos (positive integer) |
+| `sponsorblock` | `true` | `true` / `false` |
+| `exit_on_complete` | `false` | `true` / `false` |
+| `default_reuse` | `true` | `true` / `false` |
+| `reverse_playlist` | `false` | `true` / `false` |
+| `format_preview` | `false` | `true` / `false` |
+| `merge_mode` | `false` | `true` / `false` |
 | `rate_limit` | `""` | e.g. `"5M"`, empty = unlimited |
-| `cookies_file` | `""` | Path to cookies.txt for private videos |
-| `timeout_seconds` | `5` | Auto-confirm timeout (`-1` = no timeout) |
-| `enable_sounds` | `true` | Play notification sounds |
-| `format_preview` | `false` | Show format table before download |
-| `merge_mode` | `false` | Separate v/a + own ffmpeg merge |
-| `extract_flat.inspect` | `true` | Lightweight URL inspection |
-| `extract_flat.search` | `false` | Full metadata in search results |
+| `cookies_file` | `""` | Path to cookies.txt |
+| `cookies_from_browser` | `""` | Browser name: `"chrome"`, `"firefox"`, `"edge"`, etc. |
+| `proxy` | `""` | `"http://host:port"`, `"socks5://host:port"`, or `"auto"` (scans system + local ports) |
+| `timeout_seconds` | `5` | Auto-confirm timeout (`-1` = no timeout, positive int = seconds) |
+| `enable_sounds` | `true` | `true` / `false` |
+| `extract_flat.inspect` | `true` | `true` / `false` |
+| `extract_flat.search` | `false` | `true` / `false` |
 
 ### Video
 
-| Key | Default | Description |
-|-----|---------|-------------|
+| Key | Default | Available values |
+|-----|---------|-----------------|
 | `preferred_format` | `"mp4"` | `"mp4"`, `"mkv"`, `"webm"` |
-| `quality_priority` | `["480","360","720"]` | Preferred resolutions (ordered) |
-| `preferred_codec` | `"h264"` | `"h264"`, `"h265"`, `"vp9"` |
+| `quality_priority` | `["480","360","720"]` | Any resolution numbers, ordered by preference |
+| `preferred_codec` | `"h264"` | `"h264"`, `"h265"`, `"vp9"`, `"av1"`, `"any"` |
 
 ### Audio
 
-| Key | Default | Description |
-|-----|---------|-------------|
+| Key | Default | Available values |
+|-----|---------|-----------------|
 | `preferred_format` | `"m4a"` | `"m4a"`, `"mp3"`, `"opus"` |
-| `quality_priority` | `["128","192","264"]` | Preferred bitrates |
-| `default_quality` | `128` | Fallback bitrate |
+| `quality_priority` | `["128","192","264"]` | Any bitrate numbers, ordered by preference |
+| `default_quality` | `128` | Fallback bitrate (integer) |
 
 ### Subtitle
 
-| Key | Default | Description |
-|-----|---------|-------------|
-| `prefer_human` | `true` | Prefer human subs over auto |
-| `language` | `"en"` | Language code |
+| Key | Default | Available values |
+|-----|---------|-----------------|
+| `prefer_human` | `true` | `true` / `false` |
+| `language` | `"en"` | Single code or comma-separated: `"en,ja,es"`. Available codes: `ar`, `da`, `de`, `el`, `en`, `es`, `fi`, `fr`, `he`, `hi`, `hu`, `id`, `it`, `ja`, `ko`, `nl`, `no`, `pl`, `pt`, `ro`, `ru`, `sv`, `th`, `tr`, `uk`, `vi`, `zh-Hans`, `zh-Hant` |
 | `preferred_format` | `"srt"` | `"srt"`, `"vtt"`, `"ass"` |
+| `transliterate` | `""` | `""` (keep original) / `"romaji"` (convert non-Latin scripts to romanized form) |
 
 ### Watch Folder
 
@@ -418,10 +434,11 @@ Full reference for `config/config.json`:
 
 ### Search
 
-| Key | Default | Description |
-|-----|---------|-------------|
-| `filter_type` | `"all"` | `"all"`, `"video"`, or `"playlist"` |
+| Key | Default | Available values |
+|-----|---------|-----------------|
+| `filter_type` | `"all"` | `"all"`, `"video"`, `"playlist"` |
 | `default_sort` | `"relevance"` | `"relevance"`, `"views"`, `"date"`, `"duration"` |
+| `default_results` | `30` | Number of search results per page |
 
 ### Sounds
 

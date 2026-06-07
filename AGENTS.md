@@ -2,11 +2,11 @@
 
 ## Identity
 - Project: **MelT** — Python CLI tool for downloading YouTube video/audio/subtitles
-- PyPI: `meltdl` v1.2.0 (note: `melt` and `melty` were taken)
+- PyPI: `meltdl` v1.2.2 (note: `melt` and `melty` were taken)
 - GitHub: `Agaroth0x1e/melt` (note: repo name is `melt`, NOT `YT-DL`)
 - License: MIT
 - Local path: `C:\Users\USER\Documents\Projects\MelT`
-- Entry point: `main.py` (VERSION = '1.2.0')
+- Entry point: `main.py` (VERSION = '1.3.0')
 - Orchestrator: `mother_script.py`
 
 ## What Is Here
@@ -14,7 +14,7 @@ All source files are directly in the project root:
 - `main.py` — entry point, CLI flags, `find_ffmpeg()`, `check_nodejs()`
 - `mother_script.py` — orchestration, main menu loop, search, analytics, dashboard, schedule, rules, watch, sync
 - `components/` — `downloader.py`, `subcleaner.py`, `remuxer.py`
-- `utils/` — `config.py`, `logger.py`, `archive.py`, `failed.py`, `skipped.py`, `cli.py`, `notification.py`, `stats.py`, `scheduler.py`, `watcher.py`, `sync.py`, `rules.py`, `tui.py`
+- `utils/` — `config.py`, `logger.py`, `archive.py`, `failed.py`, `skipped.py`, `cli.py`, `notification.py`, `stats.py`, `scheduler.py`, `watcher.py`, `sync.py`, `rules.py`, `tui.py`, `transliterate.py`, `warp.py`
 - `sounds/` — 6 pre-made WAV files
 - `tests/` — 31 pytest tests
 - `config/` — auto-created on first run (gitignored): `config.json`, `schedule.json`, `rules.json`, `profiles/`, `sync/`
@@ -108,11 +108,12 @@ All source files are directly in the project root:
 - **Collaborative Queue:** `melt export <file>` / `melt import <file>`; `.meltqueue` JSON format: `{"version":1,"urls":[...],"fmt":"...","dest":"..."}`
 - **Format Preview:** `format_preview: true` in config; fetches formats via full extract right before download; user picks ID or Enter for auto
 - **Sound notifications:** 6 WAV sounds; each overrideable via `sounds` config section; finds ffplay/ffmpeg from bundled or system PATH
+- **WARP Tunnel** (`utils/warp.py`): `WarpManager` registers with Cloudflare API, starts `wireproxy` (userspace WireGuard, no TUN/admin needed) for SOCKS5 on `:1080`; SOCKS5 port 40000 auto-detected in proxy scanning; `warp: true`/`false` config option
 - **Playlist Diff:** snapshot-based at `logs/playlist_snapshots/<id>.json`; shows `+N new / -M removed`
 - **Default destination:** auto-splits into `downloads/videos/` or `downloads/audio/` (only when dest matches config's `downloads_dir` and format != 'both')
 - **Timeout:** auto-starts only when no key is pressed; Windows uses `msvcrt.kbhit()`, Unix/Mac uses `select.select()`; `-1` = no timeout
 - **Logging:** all user actions logged to `logs/log.txt` (menu choices, search queries, URL entries, option modifications, sub-menu actions, download results, exits)
-- **Banner:** minimalist — just `MelT` + `v1.2.0` in a small bordered box
+- **Banner:** minimalist — just `MelT` + `v1.2.2` in a small bordered box
 - **Resume:** `--resume` flag loads `_resume_queue.json` from config working dir
 
 ### Bundling
@@ -122,15 +123,27 @@ All source files are directly in the project root:
 - `find_ffmpeg()`: when bundled, checks `_bundle_dir()/ffmpeg.exe` → `_exe_dir()/ffmpeg.exe` → system PATH
 - `os.environ['FFMPEG_PATH']` only set in standalone builds
 
-### v1.2.0 — Current ✅
+### v1.2.2 — Current ✅
 
-(Features added: `archive_action`, `archive_timeout` config, `_deep_merge` config migration, removed GitHub public proxy list)
-- Feature-complete per original plan
-- Published to PyPI: `meltdl` v1.2.0
+- Multi-language subtitle download + embedding (comma-separated `language: "en,ja"`)
+- Subtitle tracks auto-split into karaoke-style single lines with proportional timing
+- `[music]`, `♪`, and bracketed annotations stripped from subtitles
+- Non-Latin script transliteration (Korean → romaji, Japanese → rōmaji, Cyrillic → Latin, etc.)
+- `transliterate: "romaji"` config option
+- Cover art preserved when embedding subtitles into audio (ffmpeg `-map 0:v?`)
+- PotPlayer-compatible `mov_text` subtitles in audio files
+- `©lyr` + `----:com.apple.iTunes:LYRICS` lyrics tags in M4A
+- Duplicate `archive.txt` entries prevented
+- Real-time progress messages via `print(flush=True)`
+- Published to PyPI: `meltdl` v1.2.2
 - GitHub release with 3 platform binaries: `melt.exe` (Win), `melt-linux` (Linux), `melt-macos` (macOS CLI binary, no `.dmg`)
 - macOS CLI tool ships as a plain binary (no extension) — standard for CLI tools on macOS; `.dmg` is for GUI `.app` bundles
 - **`archive_action`** config (`skip`/`ask`/`redownload`, default `skip`): per-item check when video ID is in archive.txt but file is missing from disk; `skip` auto-skips after `archive_timeout` seconds (default 10)
 - **`_deep_merge`** in `Config.load()` auto-fills missing config keys from defaults when loading existing config files
+- **`warp`** config (`true`/`false`, default `false`): when `true`, MelT auto-detects Cloudflare WARP client SOCKS5 proxy at `localhost:40000` or starts its own `wireproxy` tunnel to bypass YouTube rate limiting
+- **`warp.py`**: `WarpManager` class — registers new WARP devices via Cloudflare API (`api.cloudflareclient.com/v0a2158/reg`), generates WireGuard keypair, saves config; starts `wireproxy` (userspace WireGuard client) for SOCKS5 proxy on `:1080` — no TUN driver or admin rights required
+- **`wireproxy` auto-download**: when binary not found, downloads from `github.com/octeep/wireproxy` releases (Windows/Linux/macOS)
+- **Proxy scan includes WARP port 40000**: common proxy port list now starts at `40000` (WARP SOCKS5), giving it priority over `1080`/`9050`
 
 ### Build Workflow
 - `.github/workflows/build.yml` triggers on `workflow_dispatch` (with `tag` input) or `release: [published]`

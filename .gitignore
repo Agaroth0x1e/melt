@@ -50,3 +50,7 @@ bin/host/melt.exe
 icon_preview.png
 config/config.json
 ffmpeg.exe
+
+melt.exe
+melt-linux
+build_temp/

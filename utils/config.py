@@ -41,12 +41,54 @@ class Config:
                     changed = True
         return changed
 
+    def _migrate(self, cfg):
+        changes = False
+        general = cfg.get('general', {})
+        if not general:
+            return cfg, changes
+
+        sections = {
+                'paths': ['temp_dir', 'downloads_dir', 'archive_file', 'log_file', 'failed_file', 'skipped_file'],
+            'network': ['proxy', 'rate_limit', 'cookies_file', 'cookies_from_browser', 'timeout_seconds'],
+            'download': ['default_format', 'max_threads', 'filename_template', 'playlist_folder_template',
+                         'numbering', 'duplicate_action', 'archive_action', 'archive_timeout',
+                         'sponsorblock', 'reverse_playlist', 'format_preview', 'merge_mode', 'extract_flat'],
+        }
+
+        for section, keys in sections.items():
+            if section not in cfg:
+                cfg[section] = {}
+                changes = True
+            for k in keys:
+                if k in general and k not in cfg[section]:
+                    cfg[section][k] = general[k]
+                    changes = True
+
+        if 'warp' in general and 'warp' not in cfg.get('network', {}):
+            cfg.setdefault('network', {})['warp'] = general['warp'] in ('auto', True, 'true', 'on')
+            changes = True
+
+        keep = ['clear_temp', 'exit_on_complete', 'enable_sounds', 'default_reuse', 'dry_run']
+        new_general = {}
+        for k in keep:
+            if k in general:
+                new_general[k] = general[k]
+        if new_general:
+            cfg['general'] = new_general
+        elif 'general' in cfg:
+            del cfg['general']
+            changes = True
+        return cfg, changes
+
     def load(self):
         if os.path.exists(self.config_path):
             with open(self.config_path, 'r', encoding='utf-8') as f:
                 loaded = json.load(f)
-            changed = self._deep_merge(loaded, self.defaults())
+            migrated, changed = self._migrate(loaded)
             if changed:
+                loaded = migrated
+            changed2 = self._deep_merge(loaded, self.defaults())
+            if changed or changed2:
                 self.config = loaded
                 self.save()
             return loaded
@@ -71,37 +113,44 @@ class Config:
     def defaults(self):
         return {
             "general": {
+                "clear_temp": True,
+                "exit_on_complete": False,
+                "enable_sounds": True,
+                "default_reuse": True,
+            },
+            "paths": {
                 "temp_dir": "temp",
                 "downloads_dir": "downloads",
                 "archive_file": "logs/archive.txt",
                 "log_file": "logs/log.txt",
                 "failed_file": "logs/failed.txt",
                 "skipped_file": "logs/skipped.txt",
-                "clear_temp": True,
+            },
+            "network": {
+                "proxy": "",
+                "warp": False,
+                "rate_limit": "",
+                "cookies_file": "",
+                "cookies_from_browser": "",
+                "timeout_seconds": 5,
+            },
+            "download": {
                 "default_format": "video",
                 "max_threads": 10,
-                "timeout_seconds": 5,
                 "filename_template": "%(title)s.%(ext)s",
                 "playlist_folder_template": "%(playlist_title)s",
                 "numbering": False,
                 "duplicate_action": "skip",
                 "archive_action": "skip",
                 "archive_timeout": 10,
-                "cookies_file": "",
-                "cookies_from_browser": "",
-                "rate_limit": "",
-                "exit_on_complete": False,
                 "sponsorblock": True,
                 "reverse_playlist": False,
-                "enable_sounds": True,
-                "default_reuse": True,
                 "format_preview": False,
                 "merge_mode": False,
                 "extract_flat": {
                     "inspect": True,
                     "search": False
                 },
-                "proxy": ""
             },
             "video": {
                 "preferred_format": "mp4",
@@ -116,7 +165,8 @@ class Config:
             "subtitle": {
                 "prefer_human": True,
                 "language": "en",
-                "preferred_format": "srt"
+                "preferred_format": "srt",
+                "transliterate": ""
             },
             "watch_folder": {
                 "enabled": False,
@@ -147,46 +197,50 @@ class Config:
     def validate(self):
         errors = []
         g = self.config.get("general", {})
-        if not isinstance(g.get("max_threads"), int) or g["max_threads"] < 1:
-            errors.append("general.max_threads must be a positive integer")
-        if not isinstance(g.get("timeout_seconds"), int) or g["timeout_seconds"] < -1 or g["timeout_seconds"] == 0:
-            errors.append("general.timeout_seconds must be a positive integer, or -1 for no timeout")
-        if g.get("default_format") not in ("video", "audio"):
-            errors.append("general.default_format must be 'video' or 'audio'")
-        if g.get("duplicate_action") not in ("skip", "overwrite", "keep"):
-            errors.append("general.duplicate_action must be 'skip', 'overwrite', or 'keep'")
-        archive_action = g.get("archive_action")
+        n = self.config.get("network", {})
+        d = self.config.get("download", {})
+        p = self.config.get("paths", {})
+
+        if not isinstance(d.get("max_threads"), int) or d["max_threads"] < 1:
+            errors.append("download.max_threads must be a positive integer")
+        if not isinstance(n.get("timeout_seconds"), int) or n["timeout_seconds"] < -1 or n["timeout_seconds"] == 0:
+            errors.append("network.timeout_seconds must be a positive integer, or -1 for no timeout")
+        if d.get("default_format") not in ("video", "audio"):
+            errors.append("download.default_format must be 'video' or 'audio'")
+        if d.get("duplicate_action") not in ("skip", "overwrite", "keep"):
+            errors.append("download.duplicate_action must be 'skip', 'overwrite', or 'keep'")
+        archive_action = d.get("archive_action")
         if archive_action is not None and archive_action not in ("skip", "ask", "redownload"):
-            errors.append("general.archive_action must be 'skip', 'ask', or 'redownload'")
-        archive_timeout = g.get("archive_timeout")
+            errors.append("download.archive_action must be 'skip', 'ask', or 'redownload'")
+        archive_timeout = d.get("archive_timeout")
         if archive_timeout is not None and (not isinstance(archive_timeout, int) or archive_timeout < 1):
-            errors.append("general.archive_timeout must be a positive integer")
+            errors.append("download.archive_timeout must be a positive integer")
         if not isinstance(g.get("clear_temp"), bool):
             errors.append("general.clear_temp must be true/false")
-        if not isinstance(g.get("numbering"), bool):
-            errors.append("general.numbering must be true/false")
-        if not isinstance(g.get("sponsorblock", True), bool):
-            errors.append("general.sponsorblock must be true/false")
-        if not isinstance(g.get("reverse_playlist", False), bool):
-            errors.append("general.reverse_playlist must be true/false")
+        if not isinstance(d.get("numbering"), bool):
+            errors.append("download.numbering must be true/false")
+        if not isinstance(d.get("sponsorblock", True), bool):
+            errors.append("download.sponsorblock must be true/false")
+        if not isinstance(d.get("reverse_playlist", False), bool):
+            errors.append("download.reverse_playlist must be true/false")
         if not isinstance(g.get("exit_on_complete", False), bool):
             errors.append("general.exit_on_complete must be true/false")
         if not isinstance(g.get("enable_sounds", True), bool):
             errors.append("general.enable_sounds must be true/false")
         if not isinstance(g.get("default_reuse", True), bool):
             errors.append("general.default_reuse must be true/false")
-        if not isinstance(g.get("format_preview", False), bool):
-            errors.append("general.format_preview must be true/false")
-        if not isinstance(g.get("merge_mode", False), bool):
-            errors.append("general.merge_mode must be true/false")
-        ef = g.get("extract_flat", {})
+        if not isinstance(d.get("format_preview", False), bool):
+            errors.append("download.format_preview must be true/false")
+        if not isinstance(d.get("merge_mode", False), bool):
+            errors.append("download.merge_mode must be true/false")
+        ef = d.get("extract_flat", {})
         if not isinstance(ef, dict):
-            errors.append("general.extract_flat must be an object")
+            errors.append("download.extract_flat must be an object")
         else:
             if not isinstance(ef.get("inspect", True), bool):
-                errors.append("general.extract_flat.inspect must be true/false")
+                errors.append("download.extract_flat.inspect must be true/false")
             if not isinstance(ef.get("search", False), bool):
-                errors.append("general.extract_flat.search must be true/false")
+                errors.append("download.extract_flat.search must be true/false")
         v = self.config.get("video", {})
         if v.get("preferred_format") not in ("mp4", "mkv", "webm"):
             errors.append("video.preferred_format must be 'mp4', 'mkv', or 'webm'")

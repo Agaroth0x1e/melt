@@ -19,6 +19,7 @@ class SubCleaner:
 
         entries = self._parse_entries(content, is_vtt)
         cleaned = self._remove_rollup(entries)
+        cleaned = self._remove_bracketed(cleaned)
 
         base, ext = os.path.splitext(srt_path)
         out_path = f"{base}.clean.srt"
@@ -86,6 +87,29 @@ class SubCleaner:
                 prev_lines.update(current_lines)
 
         return cleaned
+
+    @staticmethod
+    def _remove_bracketed(entries):
+        bracket_pat = re.compile(r'\[.*?\]')
+        music_pat = re.compile(r'♪')
+
+        result = []
+        for entry in entries:
+            lines = [ln.strip() for ln in entry['text'].split('\n') if ln.strip()]
+            clean = []
+            for ln in lines:
+                ln = bracket_pat.sub('', ln)
+                ln = music_pat.sub('', ln)
+                ln = ln.strip()
+                if ln:
+                    clean.append(ln)
+            if clean:
+                result.append({
+                    'time': entry['time'],
+                    'text': '\n'.join(clean),
+                    'original_text': entry.get('original_text', entry['text']),
+                })
+        return result
 
     def _write_srt(self, entries, out_path):
         with open(out_path, 'w', encoding='utf-8') as f:

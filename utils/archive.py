@@ -15,5 +15,7 @@ class Archive:
         return False
 
     def mark_downloaded(self, video_id):
+        if self.is_downloaded(video_id):
+            return
         with open(self.archive_path, 'a', encoding='utf-8') as f:
             f.write(video_id + '\n')

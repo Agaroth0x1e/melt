@@ -5,7 +5,7 @@ import time
 import json
 import subprocess
 
-VERSION = '1.2.1'
+VERSION = '1.3.0'
 
 HELP_TEXT = f"""
 MelT v{VERSION}
@@ -467,7 +467,7 @@ def main():
         sc = s_cfg.get('search', {})
         filter_type = sc.get('filter_type', 'all')
         default_sort = sc.get('default_sort', 'relevance')
-        search_flat = s_cfg.get('general', {}).get('extract_flat', {}).get('search', False)
+        search_flat = s_cfg.get('download', {}).get('extract_flat', {}).get('search', False)
 
         total_wanted = 30
         while True:
@@ -809,10 +809,10 @@ def main():
         input("\nPress Enter to exit...")
         sys.exit(1)
 
-    log_path = config.resolve_path(config['general']['log_file'])
-    archive_path = config.resolve_path(config['general']['archive_file'])
-    failed_path = config.resolve_path(config['general']['failed_file'])
-    skipped_path = config.resolve_path(config['general']['skipped_file'])
+    log_path = config.resolve_path(config['paths']['log_file'])
+    archive_path = config.resolve_path(config['paths']['archive_file'])
+    failed_path = config.resolve_path(config['paths']['failed_file'])
+    skipped_path = config.resolve_path(config['paths']['skipped_file'])
 
     logger = Logger(log_path)
     archive = Archive(archive_path)

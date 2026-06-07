@@ -19,7 +19,7 @@ class Downloader:
         self.logger = logger
         self._info_cache = {}
         self._flat_cache = {}
-        self._flat = config.get('general', {}).get('extract_flat', {}).get('inspect', True)
+        self._flat = config.get('download', {}).get('extract_flat', {}).get('inspect', True)
 
     def _resolve(self, path):
         return path if os.path.isabs(path) else self.config.resolve_path(path)
@@ -37,7 +37,17 @@ class Downloader:
             return max(candidates, key=os.path.getmtime)
         return None
 
-    def _find_subtitle_file(self, directory, lang='en', prefer_human=True):
+    def _find_subtitle_files(self, directory, languages, prefer_human=True):
+        result = {}
+        for lang in languages:
+            found = self._find_single_subtitle(directory, lang, prefer_human)
+            if found:
+                result[lang] = found
+        return result
+
+    def _find_single_subtitle(self, directory, lang, prefer_human=True):
+        if not os.listdir(directory):
+            return None
         files = sorted(os.listdir(directory), reverse=True)
         candidates = {'human': [], 'auto': []}
         for f in files:
@@ -280,7 +290,7 @@ class Downloader:
                 sys.stderr.flush()
 
     def _cookies_opts(self):
-        cf = self.config['general'].get('cookies_file', '')
+        cf = self.config['network'].get('cookies_file', '')
         if cf:
             cf_path = self._resolve(cf)
             if os.path.exists(cf_path):
@@ -288,19 +298,19 @@ class Downloader:
         return {}
 
     def _cookies_from_browser_opts(self):
-        browser = self.config['general'].get('cookies_from_browser', '')
+        browser = self.config['network'].get('cookies_from_browser', '')
         if browser:
             return {'cookiesfrombrowser': (browser,)}
         return {}
 
     def _rate_limit_opts(self):
-        val = self.config['general'].get('rate_limit', '')
+        val = self.config['network'].get('rate_limit', '')
         if val:
             return {'limit_rate': val}
         return {}
 
     def _sponsorblock_opts(self):
-        if self.config['general'].get('sponsorblock', True):
+        if self.config['download'].get('sponsorblock', True):
             return {'sponsorblock_mark': 'all'}
         return {}
 
@@ -311,14 +321,14 @@ class Downloader:
         return {}
 
     def _proxy_opts(self):
-        proxy_setting = self.config['general'].get('proxy', '')
+        proxy_setting = self.config['network'].get('proxy', '')
         if proxy_setting and proxy_setting != 'auto':
             return {'proxy': proxy_setting}
         if proxy_setting == 'auto':
             found = self._detect_proxy()
             if found:
                 self.logger.info(f"Auto-detected proxy: {found}")
-                self.config['general']['proxy'] = found
+                self.config['network']['proxy'] = found
                 return {'proxy': found}
         return {}
 
@@ -331,7 +341,7 @@ class Downloader:
         if sys_proxy:
             candidates.append(sys_proxy)
 
-        common_ports = [1080, 9050, 8118, 8080, 3128]
+        common_ports = [40000, 1080, 9050, 8118, 8080, 3128]
         for port in common_ports:
             candidates.append(('socks5', '127.0.0.1', port))
             candidates.append(('http', '127.0.0.1', port))
@@ -385,10 +395,10 @@ class Downloader:
         work_dir = self._resolve(job_dir)
         os.makedirs(work_dir, exist_ok=True)
 
-        tmpl = self.config['general']['filename_template']
+        tmpl = self.config['download']['filename_template']
         outtmpl = os.path.join(work_dir, tmpl)
 
-        merge_mode = self.config['general'].get('merge_mode', False)
+        merge_mode = self.config['download'].get('merge_mode', False)
 
         if merge_mode:
             v_opts = {
@@ -483,7 +493,7 @@ class Downloader:
         work_dir = self._resolve(job_dir)
         os.makedirs(work_dir, exist_ok=True)
 
-        tmpl = self.config['general']['filename_template']
+        tmpl = self.config['download']['filename_template']
         outtmpl = os.path.join(work_dir, tmpl)
         quality = self.config['audio']['default_quality']
 
@@ -524,9 +534,10 @@ class Downloader:
         work_dir = self._resolve(job_dir)
         os.makedirs(work_dir, exist_ok=True)
 
-        tmpl = self.config['general']['filename_template']
+        tmpl = self.config['download']['filename_template']
         outtmpl = os.path.join(work_dir, tmpl)
-        lang = self.config['subtitle']['language']
+        raw_lang = self.config['subtitle']['language']
+        languages = [l.strip() for l in raw_lang.split(',')] if ',' in raw_lang else [raw_lang]
         prefer_human = self.config['subtitle'].get('prefer_human', True)
         sub_fmt = self.config['subtitle'].get('preferred_format', 'srt')
 
@@ -537,7 +548,7 @@ class Downloader:
             'skip_download': True,
             'writesubtitles': True,
             'writeautomaticsub': True,
-            'subtitleslangs': [lang],
+            'subtitleslangs': languages,
             'subtitlesformat': sub_fmt,
             'logger': YtdlpLogger(),
         }
@@ -547,7 +558,7 @@ class Downloader:
         ydl_opts.update(self._ffmpeg_location_opts())
         ydl_opts.update(self._proxy_opts())
 
-        self.logger.info(f"Downloading subtitles for: {entry['title']}")
+        self.logger.info(f"Downloading subtitles for: {entry['title']} (langs: {', '.join(languages)})")
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([entry['url']])
-        return self._find_subtitle_file(work_dir, lang, prefer_human)
+        return self._find_subtitle_files(work_dir, languages, prefer_human)

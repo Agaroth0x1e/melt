@@ -101,7 +101,7 @@ def run_dashboard(config, logger):
                                 live.update(_build_dashboard(stats.get(), config))
                                 live.refresh()
                             elif key == 'd':
-                                d = config.resolve_path(config['general']['downloads_dir'])
+                                d = config.resolve_path(config['paths']['downloads_dir'])
                                 if os.path.exists(d):
                                     os.startfile(d)
                         else:
@@ -116,7 +116,7 @@ def run_dashboard(config, logger):
                                 live.update(_build_dashboard(stats.get(), config))
                                 live.refresh()
                             elif key == 'd':
-                                d = config.resolve_path(config['general']['downloads_dir'])
+                                d = config.resolve_path(config['paths']['downloads_dir'])
                                 if os.path.exists(d):
                                     os.startfile(d)
                     live.update(_build_dashboard(stats.get(), config))

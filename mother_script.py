@@ -17,6 +17,8 @@ from components.subcleaner import SubCleaner
 from components.remuxer import Remuxer
 from utils.notification import notify_async as _notify
 from utils.stats import StatsTracker
+from utils.transliterate import Transliterator
+from utils.warp import WarpManager
 
 
 class MotherScript:
@@ -40,6 +42,8 @@ class MotherScript:
         self._sounds_enabled = self.config['general'].get('enable_sounds', True)
         self._prev_settings = None
         self.stats = StatsTracker(config)
+        self.transliterator = Transliterator()
+        self._warp_manager = None
         signal.signal(signal.SIGINT, self._handle_sigint)
         atexit.register(self._cleanup_temp)
 
@@ -63,6 +67,15 @@ class MotherScript:
     [green]Enter[/]              Accept default / auto-confirm
     [green]m[/]                  Modify options before starting (format, dest, etc.)
     [green]q[/] / [green]exit[/] / [green]quit[/]  Exit at most prompts
+
+  [bold]Modify options (press [green]m[/]):[/]
+    Items              Change URLs
+    Format             video | audio | both
+    Destination        Output folder
+    Numbering          Yes / No (toggle)
+    On Duplicate       skip | overwrite | keep
+    Archive Action     skip | ask | redownload
+    Dry Run            Yes / No (toggle)
 
   [bold]Session-persistent options:[/]
     After first download, MelT remembers your settings and offers
@@ -98,6 +111,34 @@ class MotherScript:
     When enabled, MelT inspects all URLs and shows what would be downloaded
     without actually downloading anything. Useful for testing.
 
+  [bold]Subtitles:[/]
+    Set [bold]language[/] in config to download subtitles (default: [green]"en"[/]).
+    Use comma-separated codes for multiple languages: [green]"en,ja,es"[/].
+    Each language becomes a separate subtitle track in the output file.
+
+    Available language codes:
+      [green]ar[/] Arabic      [green]da[/] Danish      [green]de[/] German
+      [green]el[/] Greek       [green]en[/] English      [green]es[/] Spanish
+      [green]fi[/] Finnish     [green]fr[/] French       [green]he[/] Hebrew
+      [green]hi[/] Hindi       [green]hu[/] Hungarian    [green]id[/] Indonesian
+      [green]it[/] Italian     [green]ja[/] Japanese     [green]ko[/] Korean
+      [green]nl[/] Dutch       [green]no[/] Norwegian    [green]pl[/] Polish
+      [green]pt[/] Portuguese  [green]ro[/] Romanian     [green]ru[/] Russian
+      [green]sv[/] Swedish     [green]th[/] Thai         [green]tr[/] Turkish
+      [green]uk[/] Ukrainian   [green]vi[/] Vietnamese   [green]zh-Hans[/] Chinese (Simplified)
+      [green]zh-Hant[/] Chinese (Traditional)
+
+  [bold]Transliteration:[/]
+    Set [bold]transliterate: "romaji"[/] in config to convert non-Latin scripts
+    (Korean, Japanese, Chinese, Russian, Arabic, etc.) to romanized text.
+    Default [green]""[/] keeps the original script.
+
+  [bold]Subtitle processing:[/]
+    [green]-[/] [music], [applause], [♪] and other bracketed annotations are stripped
+    [green]-[/] Multi-line subtitle blocks are split into single karaoke-style lines
+              with proportional timing for line-by-line display
+    [green]-[/] Duplicate rolling captions are removed
+
   [bold]Keyboard shortcuts:[/]
     Ctrl+C       Abort current download batch immediately
     Enter        Confirm at prompts
@@ -108,8 +149,8 @@ class MotherScript:
     Edit [bold]config/config.json[/] for permanent defaults:
       format, threads, timeout, numbering, duplicate action, sounds,
       format_preview, merge_mode, chapter_splitter, cookies, rate_limit, etc.
-    Use [bold]python main.py --profile <name>[/] to load a saved profile.
-    Use [bold]python main.py profile save <name>[/] to save a profile.
+    Use [bold]melt --profile <name>[/] to load a saved profile.
+    Use [bold]melt profile save <name>[/] to save a profile.
 """
 
     def _save_queue(self, entries, fmt, threads, do_numbering, dup_action):
@@ -211,10 +252,35 @@ class MotherScript:
                 except Exception:
                     pass
 
+    def _ensure_warp(self):
+        if self._warp_manager is None:
+            config_dir = os.path.dirname(self.config.config_path)
+            self._warp_manager = WarpManager(config_dir, self.logger)
+        return self._warp_manager
+
+    def _connect_warp(self, force=False):
+        if not force and not self.config['network'].get('warp', False):
+            return False
+        wm = self._ensure_warp()
+        if wm.load_config() is None:
+            self.cli.show_info("Registering WARP device...")
+            wm.register()
+        self.cli.show_info("Connecting WARP tunnel...")
+        if wm.connect():
+            self.cli.show_info("WARP tunnel connected")
+            return True
+        self.cli.show_warning("WARP tunnel failed to connect")
+        return False
+
+    def _disconnect_warp(self):
+        if self._warp_manager and self._warp_manager.is_connected():
+            self.cli.show_info("Disconnecting WARP tunnel...")
+            self._warp_manager.disconnect()
+
     def _run_download_flow(self):
-        threads = self.config['general']['max_threads']
-        do_numbering = self.config['general'].get('numbering', False)
-        duplicate_action = self.config['general'].get('duplicate_action', 'skip')
+        threads = self.config['download']['max_threads']
+        do_numbering = self.config['download'].get('numbering', False)
+        duplicate_action = self.config['download'].get('duplicate_action', 'skip')
         dry_run = False
 
         raw = ''
@@ -251,7 +317,7 @@ class MotherScript:
                         do_numbering = self._prev_settings['numbering']
                         duplicate_action = self._prev_settings['duplicate_action']
                         dry_run = self._prev_settings.get('dry_run', dry_run)
-                        archive_action = self._prev_settings.get('archive_action', self.config['general'].get('archive_action', 'skip'))
+                        archive_action = self._prev_settings.get('archive_action', self.config['download'].get('archive_action', 'skip'))
                     else:
                         fmt = self.cli.ask_format()
                         dest = self.cli.ask_destination()
@@ -261,7 +327,7 @@ class MotherScript:
                     dest = self.cli.ask_destination()
                 self.logger.info(f"Options: fmt={fmt}, dest={dest}, numbering={do_numbering}, dup={duplicate_action}, dry_run={dry_run}")
 
-                if dest == self.config['general']['downloads_dir'] and fmt != 'both':
+                if dest == self.config['paths']['downloads_dir'] and fmt != 'both':
                     dest = os.path.join(dest, 'videos' if fmt == 'video' else 'audio')
 
                 url_infos = []
@@ -296,8 +362,8 @@ class MotherScript:
                 all_entries = []
                 def make_video_audio(entry_base, base_dest):
                     if fmt == 'both':
-                        v = os.path.join(base_dest, 'videos') if base_dest == self.config['general']['downloads_dir'] else base_dest
-                        a = os.path.join(base_dest, 'audio') if base_dest == self.config['general']['downloads_dir'] else base_dest
+                        v = os.path.join(base_dest, 'videos') if base_dest == self.config['paths']['downloads_dir'] else base_dest
+                        a = os.path.join(base_dest, 'audio') if base_dest == self.config['paths']['downloads_dir'] else base_dest
                         return [
                             {**entry_base, 'dest_abs': v, 'fmt': 'video'},
                             {**entry_base, 'dest_abs': a, 'fmt': 'audio'},
@@ -314,7 +380,7 @@ class MotherScript:
                             self.logger.error(f"Failed to expand playlist {url}: {e}")
                             continue
 
-                        if self.config['general'].get('reverse_playlist', False):
+                        if self.config['download'].get('reverse_playlist', False):
                             entries = list(reversed(entries))
 
                         snapshot = self._load_playlist_snapshot(pl_id)
@@ -326,7 +392,7 @@ class MotherScript:
                         if prange.lower() != 'all':
                             entries = self._parse_range(prange, entries)
 
-                        tmpl = self.config['general'].get('playlist_folder_template', '%(playlist_title)s')
+                        tmpl = self.config['download'].get('playlist_folder_template', '%(playlist_title)s')
                         folder = tmpl.replace('%(playlist_title)s', pl_title).replace('%(playlist_id)s', pl_id)
                         safe_folder = self._sanitize(folder)
                         pl_dest = dest if os.path.isabs(dest) else self.config.resolve_path(dest)
@@ -339,14 +405,14 @@ class MotherScript:
                             {'url': url, 'id': info['id'], 'title': info['title']}, dest
                         ))
 
-                archive_action = self.config['general'].get('archive_action', 'skip')
+                archive_action = self.config['download'].get('archive_action', 'skip')
                 if self._prev_settings:
                     archive_action = self._prev_settings.get('archive_action', archive_action)
 
                 options = self._build_options(all_entries, fmt, dest, do_numbering, duplicate_action, dry_run, archive_action)
                 self.cli.show_options_summary(options)
 
-                timeout = self.config['general']['timeout_seconds']
+                timeout = self.config['network']['timeout_seconds']
                 mod_key = None
                 _force_modify = (reuse == 'modify') if self._prev_settings else False
                 while True:
@@ -385,7 +451,7 @@ class MotherScript:
                     continue
                 break
 
-            if self.config['general'].get('format_preview', False) and not any(e.get('chosen_format') for e in all_entries):
+            if self.config['download'].get('format_preview', False) and not any(e.get('chosen_format') for e in all_entries):
                 unique_urls = list(dict.fromkeys(e['url'] for e in all_entries))
                 for u in unique_urls[:1]:
                     try:
@@ -424,7 +490,7 @@ class MotherScript:
                 self.cli.show_error("No resume queue found")
                 return
             fmt = queue['fmt']
-            threads = queue.get('threads', self.config['general']['max_threads'])
+            threads = queue.get('threads', self.config['download']['max_threads'])
             do_numbering = queue.get('do_numbering', False)
             duplicate_action = queue.get('duplicate_action', 'skip')
             pending = [e for e in queue['entries'] if not e['done']]
@@ -490,6 +556,26 @@ class MotherScript:
                 self.cli.console.print(self.HELP_URL_TEXT)
                 continue
 
+            elif choice in ('i', 'ip'):
+                self.logger.info("Check public IP")
+                wm = self._ensure_warp()
+                if self.config['network'].get('warp', False) and not wm.is_connected():
+                    self._connect_warp()
+                wm.show_public_ip(self.cli)
+                input("Press Enter to continue...")
+                continue
+
+            elif choice in ('w', 'warp'):
+                wm = self._ensure_warp()
+                if wm.is_connected():
+                    self._disconnect_warp()
+                    self.cli.show_info("WARP disconnected")
+                else:
+                    self._connect_warp(force=True)
+                self.logger.info(f"WARP toggled: connected={wm.is_connected()}")
+                input("Press Enter to continue...")
+                continue
+
             elif choice in ('q', 'quit', 'exit', '0'):
                 self.logger.info("User exited")
                 self.cli.show_info("Goodbye!")
@@ -533,7 +619,7 @@ class MotherScript:
             url = e.get('url', '')
             return ie == 'YoutubePlaylist' or 'playlist?list=' in url or '/playlist?' in url
 
-        search_flat = self.config.get('general', {}).get('extract_flat', {}).get('search', False)
+        search_flat = self.config.get('download', {}).get('extract_flat', {}).get('search', False)
         total_wanted = 30
         while True:
             try:
@@ -617,8 +703,8 @@ class MotherScript:
                 return
             self.logger.info(f"Search selected {len(selected_urls)} result(s): {selected_urls[:3]}...")
             self.cli.show_info(f"Selected {len(selected_urls)} result(s)")
-            self.batch_download(' '.join(selected_urls), self.config['general']['default_format'],
-                                self.config['general']['downloads_dir'])
+            self.batch_download(' '.join(selected_urls), self.config['download']['default_format'],
+                                self.config['paths']['downloads_dir'])
             return
 
     def _run_analytics(self):
@@ -773,12 +859,12 @@ class MotherScript:
                 break
 
     def batch_download(self, url, fmt, dest):
-        threads = self.config['general']['max_threads']
-        do_numbering = self.config['general'].get('numbering', False)
-        duplicate_action = self.config['general'].get('duplicate_action', 'skip')
+        threads = self.config['download']['max_threads']
+        do_numbering = self.config['download'].get('numbering', False)
+        duplicate_action = self.config['download'].get('duplicate_action', 'skip')
         dry_run = self.config['general'].get('dry_run', False)
 
-        if dest == self.config['general']['downloads_dir'] and fmt != 'both':
+        if dest == self.config['paths']['downloads_dir'] and fmt != 'both':
             dest = os.path.join(dest, 'videos' if fmt == 'video' else 'audio')
 
         urls = self._resolve_batch_urls(url)
@@ -797,8 +883,8 @@ class MotherScript:
         def make_video_audio(entry_base, base_dest):
             entry_fmt = entry_base.get('fmt', fmt)
             if entry_fmt == 'both':
-                v = os.path.join(base_dest, 'videos') if base_dest == self.config['general']['downloads_dir'] else base_dest
-                a = os.path.join(base_dest, 'audio') if base_dest == self.config['general']['downloads_dir'] else base_dest
+                v = os.path.join(base_dest, 'videos') if base_dest == self.config['paths']['downloads_dir'] else base_dest
+                a = os.path.join(base_dest, 'audio') if base_dest == self.config['paths']['downloads_dir'] else base_dest
                 return [
                     {**entry_base, 'dest_abs': v, 'fmt': 'video'},
                     {**entry_base, 'dest_abs': a, 'fmt': 'audio'},
@@ -812,9 +898,9 @@ class MotherScript:
                 except Exception as e:
                     self.logger.error(f"Failed to expand playlist {u}: {e}")
                     continue
-                if self.config['general'].get('reverse_playlist', False):
+                if self.config['download'].get('reverse_playlist', False):
                     entries = list(reversed(entries))
-                tmpl = self.config['general'].get('playlist_folder_template', '%(playlist_title)s')
+                tmpl = self.config['download'].get('playlist_folder_template', '%(playlist_title)s')
                 folder = tmpl.replace('%(playlist_title)s', pl_title).replace('%(playlist_id)s', pl_id)
                 safe_folder = self._sanitize(folder)
                 pl_dest = os.path.join(dest, safe_folder)
@@ -976,9 +1062,11 @@ class MotherScript:
         if not items:
             return
 
+        self._connect_warp()
+
         start_time = time.time()
         total = len(items)
-        temp_abs = self.config.resolve_path(self.config['general']['temp_dir'])
+        temp_abs = self.config.resolve_path(self.config['paths']['temp_dir'])
         self._temp_abs = temp_abs
 
         dests = set(e.get('dest_abs', '?') for e in all_entries)
@@ -1030,9 +1118,9 @@ class MotherScript:
         if not self._interrupted:
             self._remove_queue()
 
-        log_file = self.config.resolve_path(self.config['general']['log_file'])
-        failed_file = self.config.resolve_path(self.config['general']['failed_file'])
-        skipped_file = self.config.resolve_path(self.config['general']['skipped_file'])
+        log_file = self.config.resolve_path(self.config['paths']['log_file'])
+        failed_file = self.config.resolve_path(self.config['paths']['failed_file'])
+        skipped_file = self.config.resolve_path(self.config['paths']['skipped_file'])
         elapsed = time.time() - start_time
         dest_show = list(dests)[0] if len(dests) == 1 else dest_label
         self.cli.show_completion(self.success_count, self.fail_count, dest_show, log_file, failed_file, self.sub_fail_count, elapsed, self.skip_count, skipped_file)
@@ -1054,6 +1142,8 @@ class MotherScript:
                 except Exception:
                     pass
             self.cli.show_info("Temp directory cleared")
+
+        self._disconnect_warp()
 
     def _process_single(self, entry, idx, fmt, dest_abs, temp_abs, do_numbering, duplicate_action, total, archive_action='skip'):
         if not entry.get('id'):
@@ -1103,8 +1193,8 @@ class MotherScript:
             if not os.path.exists(final_path):
                 if archive_action == 'ask':
                     title_short = entry.get('title', entry['id'])[:60]
-                    self.cli.show_info(f"Video already in archive (file not found at destination):")
-                    self.cli.show_info(f"  - {title_short}")
+                    self.cli.console.print(f"[yellow]Video already in archive (file not found at destination):[/]")
+                    self.cli.console.print(f"  [dim]- {title_short}[/]")
                     while True:
                         choice = self.cli.console.input("[bold yellow]Redownload this video?[/] (y/N): ").strip().lower()
                         if choice in ('y', 'yes'):
@@ -1131,12 +1221,12 @@ class MotherScript:
                 if not main_file:
                     raise RuntimeError("No media file produced")
 
+                print(flush=True)
                 self.cli.show_info(f"[{idx}/{total}] Downloading subtitles...")
-                sub_file = None
-                clean_sub = None
+                sub_files = {}
                 try:
-                    sub_file = self.downloader.download_subtitles(entry, job_dir)
-                    if sub_file is None:
+                    sub_files = self.downloader.download_subtitles(entry, job_dir)
+                    if not sub_files:
                         self.sub_fail_count += 1
                         self.failed.record(video_info, "Subtitle download failed (no subtitle file produced)")
                         self.logger.error(f"Subtitle download failed for {entry['title']}: no file produced")
@@ -1146,32 +1236,52 @@ class MotherScript:
                     self.failed.record(video_info, f"Subtitle download failed: {cleaned}")
                     self.logger.error(f"Subtitle download failed for {entry['title']}: {cleaned}")
 
-                if sub_file:
+                if sub_files:
                     self.cli.show_info(f"[{idx}/{total}] Converting subtitles to SRT...")
-                    try:
-                        sub_file = self.remuxer.convert_subtitle_to_srt(sub_file)
-                    except Exception as conv_err:
-                        self.sub_fail_count += 1
-                        cleaned = self._clean_error(conv_err)
-                        self.failed.record(video_info, f"Subtitle conversion failed: {cleaned}")
-                        self.logger.error(f"Subtitle conversion failed for {entry['title']}: {cleaned}")
-                        sub_file = None
+                    for lang, sub_path in list(sub_files.items()):
+                        try:
+                            sub_files[lang] = self.remuxer.convert_subtitle_to_srt(sub_path)
+                        except Exception as conv_err:
+                            self.sub_fail_count += 1
+                            cleaned = self._clean_error(conv_err)
+                            self.failed.record(video_info, f"Subtitle conversion failed ({lang}): {cleaned}")
+                            self.logger.error(f"Subtitle conversion failed for {entry['title']} ({lang}): {cleaned}")
+                            del sub_files[lang]
 
-                if sub_file:
+                if sub_files:
                     self.cli.show_info(f"[{idx}/{total}] Cleaning subtitles...")
-                    try:
-                        clean_sub = self.subcleaner.clean_subtitle_file(sub_file)
-                    except Exception as clean_err:
-                        self.sub_fail_count += 1
-                        cleaned = self._clean_error(clean_err)
-                        self.failed.record(video_info, f"Subtitle cleaning failed: {cleaned}")
-                        self.logger.error(f"Subtitle cleaning failed for {entry['title']}: {cleaned}")
+                    for lang, sub_path in list(sub_files.items()):
+                        try:
+                            sub_files[lang] = self.subcleaner.clean_subtitle_file(sub_path)
+                        except Exception as clean_err:
+                            self.sub_fail_count += 1
+                            cleaned = self._clean_error(clean_err)
+                            self.failed.record(video_info, f"Subtitle cleaning failed ({lang}): {cleaned}")
+                            self.logger.error(f"Subtitle cleaning failed for {entry['title']} ({lang}): {cleaned}")
+                            del sub_files[lang]
+
+                if sub_files:
+                    self.cli.show_info(f"[{idx}/{total}] Splitting subtitle into karaoke lines...")
+                    for lang, sub_path in list(sub_files.items()):
+                        try:
+                            sub_files[lang] = self.remuxer.split_subtitle_lines(sub_path)
+                        except Exception as split_err:
+                            self.logger.warn(f"Subtitle split failed ({lang}): {split_err}")
+
+                transliterate = self.config['subtitle'].get('transliterate', '')
+                if transliterate and sub_files:
+                    self.cli.show_info(f"[{idx}/{total}] Transliterating to romaji...")
+                    for lang, sub_path in list(sub_files.items()):
+                        try:
+                            sub_files[lang] = self.transliterator.transliterate_file(sub_path, lang)
+                        except Exception as tr_err:
+                            self.logger.warn(f"Transliteration failed ({lang}): {tr_err}")
 
                 final_path = self._handle_duplicate_path(final_path, duplicate_action)
 
-                if clean_sub and os.path.exists(clean_sub):
+                if sub_files:
                     self.cli.show_info(f"[{idx}/{total}] Embedding subtitles...")
-                    self.remuxer.embed_subtitles(main_file, clean_sub, final_path)
+                    self.remuxer.embed_subtitles(main_file, sub_files, final_path)
                 else:
                     self.cli.show_info(f"[{idx}/{total}] Finalizing video...")
                     self._copy_or_convert_video(main_file, final_path, job_dir)
@@ -1181,10 +1291,70 @@ class MotherScript:
                 if not main_file:
                     raise RuntimeError("No media file produced")
 
+                print(flush=True)
+                self.cli.show_info(f"[{idx}/{total}] Downloading subtitles...")
+                sub_files = {}
+                try:
+                    sub_files = self.downloader.download_subtitles(entry, job_dir)
+                    if not sub_files:
+                        self.sub_fail_count += 1
+                        self.failed.record(video_info, "Subtitle download failed (no subtitle file produced)")
+                        self.logger.error(f"Subtitle download failed for {entry['title']}: no file produced")
+                except Exception as sub_err:
+                    self.sub_fail_count += 1
+                    cleaned = self._clean_error(sub_err)
+                    self.failed.record(video_info, f"Subtitle download failed: {cleaned}")
+                    self.logger.error(f"Subtitle download failed for {entry['title']}: {cleaned}")
+
+                if sub_files:
+                    self.cli.show_info(f"[{idx}/{total}] Converting subtitles to SRT...")
+                    for lang, sub_path in list(sub_files.items()):
+                        try:
+                            sub_files[lang] = self.remuxer.convert_subtitle_to_srt(sub_path)
+                        except Exception as conv_err:
+                            self.sub_fail_count += 1
+                            cleaned = self._clean_error(conv_err)
+                            self.failed.record(video_info, f"Subtitle conversion failed ({lang}): {cleaned}")
+                            self.logger.error(f"Subtitle conversion failed for {entry['title']} ({lang}): {cleaned}")
+                            del sub_files[lang]
+
+                if sub_files:
+                    self.cli.show_info(f"[{idx}/{total}] Cleaning subtitles...")
+                    for lang, sub_path in list(sub_files.items()):
+                        try:
+                            sub_files[lang] = self.subcleaner.clean_subtitle_file(sub_path)
+                        except Exception as clean_err:
+                            self.sub_fail_count += 1
+                            cleaned = self._clean_error(clean_err)
+                            self.failed.record(video_info, f"Subtitle cleaning failed ({lang}): {cleaned}")
+                            self.logger.error(f"Subtitle cleaning failed for {entry['title']} ({lang}): {cleaned}")
+                            del sub_files[lang]
+
+                if sub_files:
+                    self.cli.show_info(f"[{idx}/{total}] Splitting subtitle into karaoke lines...")
+                    for lang, sub_path in list(sub_files.items()):
+                        try:
+                            sub_files[lang] = self.remuxer.split_subtitle_lines(sub_path)
+                        except Exception as split_err:
+                            self.logger.warn(f"Subtitle split failed ({lang}): {split_err}")
+
+                transliterate = self.config['subtitle'].get('transliterate', '')
+                if transliterate and sub_files:
+                    self.cli.show_info(f"[{idx}/{total}] Transliterating to romaji...")
+                    for lang, sub_path in list(sub_files.items()):
+                        try:
+                            sub_files[lang] = self.transliterator.transliterate_file(sub_path, lang)
+                        except Exception as tr_err:
+                            self.logger.warn(f"Transliteration failed ({lang}): {tr_err}")
+
                 final_path = self._handle_duplicate_path(final_path, duplicate_action)
 
-                self.cli.show_info(f"[{idx}/{total}] Finalizing audio...")
-                self._copy_or_convert_audio(main_file, final_path, job_dir)
+                if sub_files:
+                    self.cli.show_info(f"[{idx}/{total}] Embedding subtitles into audio...")
+                    self.remuxer.embed_subtitles_into_audio(main_file, sub_files, final_path)
+                else:
+                    self.cli.show_info(f"[{idx}/{total}] Finalizing audio...")
+                    self._copy_or_convert_audio(main_file, final_path, job_dir)
 
             cs = self.config.get('chapter_splitter', {})
             if cs.get('enabled', False) and entry_fmt == 'video':
