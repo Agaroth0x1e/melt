@@ -556,21 +556,26 @@ class MotherScript:
                 self.cli.console.print(self.HELP_URL_TEXT)
                 continue
 
-            elif choice in ('i', 'status'):
-                self.logger.info("Check connection status")
+            elif choice in ('11', 'net'):
+                self.logger.info("Check net status")
                 wm = self._ensure_warp()
                 wm.show_status(self.cli)
                 self.cli.press_enter()
                 continue
 
-            elif choice in ('w', 'warp'):
+            elif choice in ('10', 'tunnel'):
+                if not self.config['network'].get('warp', False):
+                    self.cli.show_warning("Enable warp: true in config first")
+                    self.cli.press_enter()
+                    continue
                 wm = self._ensure_warp()
                 if wm.is_connected():
                     self._disconnect_warp()
-                    self.cli.show_info("WARP disconnected")
+                    self.cli.show_info("Disconnected from tunnel")
                 else:
                     self._connect_warp(force=True)
-                self.logger.info(f"WARP toggled: connected={wm.is_connected()}")
+                    self.cli.show_info("Connected to tunnel")
+                self.logger.info(f"Tunnel toggled: connected={wm.is_connected()}")
                 self.cli.press_enter()
                 continue
 
