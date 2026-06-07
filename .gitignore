@@ -38,6 +38,9 @@ logs/
 failed/
 _resume_queue.json
 
+# Testing
+TEST/
+
 # Build artifacts
 bin/
 # Sounds are tracked (small files, essential)

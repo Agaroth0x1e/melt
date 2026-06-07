@@ -40,7 +40,9 @@ class Transliterator:
         elif lang == 'ja':
             self._init_ja()
             if self._ja:
-                return ' '.join(r['hepburn'] for r in self._ja.convert(text))
+                result = ' '.join(r['hepburn'] for r in self._ja.convert(text))
+                result = re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', result)
+                return result.lower()
         self._init_any()
         if self._any:
             return self._any(text)
