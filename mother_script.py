@@ -1169,6 +1169,8 @@ class MotherScript:
                                           do_numbering, duplicate_action, total, archive_action)
 
     def _process_single_entry(self, entry, idx, fmt, dest_abs, temp_abs, do_numbering, duplicate_action, total, archive_action='skip'):
+        sep = '=' * 60
+        self.cli.console.print(f"\n[dim]{sep}[/]")
         self.cli.show_processing_item(entry['title'], idx, total)
         self.logger.info(f"Starting: {entry['title']}")
 

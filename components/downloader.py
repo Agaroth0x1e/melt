@@ -299,8 +299,8 @@ class Downloader:
                 size = d.get('_total_bytes_str', '')
                 parts = [p for p in [pct, speed, eta, size] if p]
                 if parts:
-                    sys.stderr.write(f'\r[download {entry_idx}/{total}] ' + ' • '.join(parts) + '    ')
-                    sys.stderr.flush()
+                    sys.stdout.write(f'\r[download {entry_idx}/{total}] ' + ' • '.join(parts) + '    ')
+                    sys.stdout.flush()
         return hook
 
     def _cookies_opts(self):
@@ -422,10 +422,8 @@ class Downloader:
                 'quiet': True,
                 'no_warnings': True,
                 'noprogress': True,
-                'writethumbnail': True,
                 'skip_download': False,
                 'progress_hooks': [ph],
-                'postprocessors': [{'key': 'EmbedThumbnail'}],
             }
             v_opts.update(self._cookies_opts())
             v_opts.update(self._cookies_from_browser_opts())
@@ -483,11 +481,8 @@ class Downloader:
             'quiet': True,
             'no_warnings': True,
             'noprogress': True,
-            'writethumbnail': True,
-            'merge_output_format': self.config['video']['preferred_format'],
             'skip_download': False,
             'progress_hooks': [self._make_progress_hook(entry_idx, total)],
-            'postprocessors': [{'key': 'EmbedThumbnail'}],
         }
         ydl_opts.update(self._cookies_opts())
         ydl_opts.update(self._cookies_from_browser_opts())
@@ -518,14 +513,6 @@ class Downloader:
             'quiet': True,
             'no_warnings': True,
             'noprogress': True,
-            'writethumbnail': True,
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': self.config['audio']['preferred_format'],
-                'preferredquality': str(quality),
-            }, {
-                'key': 'EmbedThumbnail',
-            }],
             'skip_download': False,
             'progress_hooks': [self._make_progress_hook(entry_idx, total)],
         }
