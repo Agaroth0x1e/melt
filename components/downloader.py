@@ -289,6 +289,20 @@ class Downloader:
                 sys.stderr.write('\r[download] ' + ' • '.join(parts) + '    ')
                 sys.stderr.flush()
 
+    @staticmethod
+    def _make_progress_hook(entry_idx, total):
+        def hook(d):
+            if d['status'] == 'downloading':
+                pct = d.get('_percent_str', '').strip()
+                speed = d.get('_speed_str', '')
+                eta = d.get('_eta_str', '')
+                size = d.get('_total_bytes_str', '')
+                parts = [p for p in [pct, speed, eta, size] if p]
+                if parts:
+                    sys.stderr.write(f'\r[download {entry_idx}/{total}] ' + ' • '.join(parts) + '    ')
+                    sys.stderr.flush()
+        return hook
+
     def _cookies_opts(self):
         cf = self.config['network'].get('cookies_file', '')
         if cf:
@@ -391,7 +405,7 @@ class Downloader:
         except Exception:
             return False
 
-    def download_video(self, entry, job_dir, fmt_override=None):
+    def download_video(self, entry, job_dir, fmt_override=None, entry_idx=0, total=0):
         work_dir = self._resolve(job_dir)
         os.makedirs(work_dir, exist_ok=True)
 
@@ -399,6 +413,7 @@ class Downloader:
         outtmpl = os.path.join(work_dir, tmpl)
 
         merge_mode = self.config['download'].get('merge_mode', False)
+        ph = self._make_progress_hook(entry_idx, total)
 
         if merge_mode:
             v_opts = {
@@ -409,7 +424,7 @@ class Downloader:
                 'noprogress': True,
                 'writethumbnail': True,
                 'skip_download': False,
-                'progress_hooks': [self._progress_hook],
+                'progress_hooks': [ph],
                 'postprocessors': [{'key': 'EmbedThumbnail'}],
             }
             v_opts.update(self._cookies_opts())
@@ -437,7 +452,7 @@ class Downloader:
                 'no_warnings': True,
                 'noprogress': True,
                 'skip_download': False,
-                'progress_hooks': [self._progress_hook],
+                'progress_hooks': [self._make_progress_hook(entry_idx, total)],
             }
             a_opts.update(self._cookies_opts())
             a_opts.update(self._cookies_from_browser_opts())
@@ -471,7 +486,7 @@ class Downloader:
             'writethumbnail': True,
             'merge_output_format': self.config['video']['preferred_format'],
             'skip_download': False,
-            'progress_hooks': [self._progress_hook],
+            'progress_hooks': [self._make_progress_hook(entry_idx, total)],
             'postprocessors': [{'key': 'EmbedThumbnail'}],
         }
         ydl_opts.update(self._cookies_opts())
@@ -489,7 +504,7 @@ class Downloader:
             except Exception as e:
                 raise RuntimeError(f"Download failed: {e}")
 
-    def download_audio(self, entry, job_dir, fmt_override=None):
+    def download_audio(self, entry, job_dir, fmt_override=None, entry_idx=0, total=0):
         work_dir = self._resolve(job_dir)
         os.makedirs(work_dir, exist_ok=True)
 
@@ -512,7 +527,7 @@ class Downloader:
                 'key': 'EmbedThumbnail',
             }],
             'skip_download': False,
-            'progress_hooks': [self._progress_hook],
+            'progress_hooks': [self._make_progress_hook(entry_idx, total)],
         }
 
         ydl_opts.update(self._cookies_opts())

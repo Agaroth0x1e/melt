@@ -1230,12 +1230,10 @@ class MotherScript:
 
         try:
             if entry_fmt == 'video':
-                self.cli.show_info(f"[{idx}/{total}] Downloading video...")
-                main_file = self.downloader.download_video(entry, job_dir, entry.get('chosen_format'))
+                main_file = self.downloader.download_video(entry, job_dir, entry.get('chosen_format'), entry_idx=idx, total=total)
                 if not main_file:
                     raise RuntimeError("No media file produced")
 
-                print(flush=True)
                 self.cli.show_info(f"[{idx}/{total}] Downloading subtitles...")
                 sub_files = {}
                 try:
@@ -1300,12 +1298,10 @@ class MotherScript:
                     self.cli.show_info(f"[{idx}/{total}] Finalizing video...")
                     self._copy_or_convert_video(main_file, final_path, job_dir)
             else:
-                self.cli.show_info(f"[{idx}/{total}] Downloading audio...")
-                main_file = self.downloader.download_audio(entry, job_dir, entry.get('chosen_format'))
+                main_file = self.downloader.download_audio(entry, job_dir, entry.get('chosen_format'), entry_idx=idx, total=total)
                 if not main_file:
                     raise RuntimeError("No media file produced")
 
-                print(flush=True)
                 self.cli.show_info(f"[{idx}/{total}] Downloading subtitles...")
                 sub_files = {}
                 try:
